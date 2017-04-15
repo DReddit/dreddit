@@ -142,6 +142,8 @@ func (node *DRNode) Mine() {
       // and append our block to the blockchain
       AppendBlock(node.Blockchain, newBlock)
 
+      DPrintf("%d appended a new block to the blockchain: %v", node.me, newBlock)
+
       // Finally, mark all the successful transactions as valid
       for txNode := range txNodes {
         node.PendingTxs[txNode.ClerkId].Status = SUCCESS
