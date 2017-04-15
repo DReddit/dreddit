@@ -136,11 +136,11 @@ func (node *DRNode) Mine() {
       }
 
       // Next generate a block that includes all these transactions
-      newBlock = generateBlock(node.Blockchain, txNodes)
+      newBlock = GenerateBlock(node.Blockchain, txNodes)
 
       // Then, advertise our new block to other miners (later)
       // and append our block to the blockchain
-      node.appendBlock(newBlock)
+      AppendBlock(node.Blockchain, newBlock)
 
       // Finally, mark all the successful transactions as valid
       for txNode := range txNodes {

@@ -11,6 +11,7 @@ const (
 )
 
 type Transaction struct {
+  Type    int       // the type of transaction
   TxIns   []TxIn    // list of input transactions
   TxOuts  []TxOut   // list of output transactions
   Parent  []byte    // hash of referenced transaction (for comment and upvote)
