@@ -65,6 +65,7 @@ func StartDRNode(me int) *DRNode {
   node := new(DRNode)
   node.me = me
   node.PendingTxs = make(map[int]*TxNode)
+  node.numPending = 0
   node.Blockchain = make([]*Block, 0)
 
   go node.Mine()
@@ -123,6 +124,7 @@ func (node *DRNode) Mine() {
 
     // Check if we have enough pending transactions to make a block
     if node.numPending >= BLOCK_SIZE_THRESHOLD {
+      txs := make([]Transaction, 0)
       txNodes := make([]*TxNode, 0)
 
       // First, validate all pending transactions
@@ -131,6 +133,7 @@ func (node *DRNode) Mine() {
           // TODO actually validate the transaction here
           // remember to validate against the entire blockchain PLUS
           // all transactions currently in txNodes!
+          txs = append(txs, txNode.Tx)
           txNodes = append(txNodes, txNode)
 
           // If the transaction isn't valid, mark it as such here
@@ -138,18 +141,19 @@ func (node *DRNode) Mine() {
       }
 
       // Next generate a block that includes all these transactions
-      newBlock := GenerateBlock(node.Blockchain, txNodes)
+      newBlock := GenerateBlock(node.Blockchain, txs)
 
       // Then, advertise our new block to other miners (later)
       // and append our block to the blockchain
       node.Blockchain = append(node.Blockchain, newBlock)
 
-      DPrintf("%d appended a new block to the blockchain: %v", node.me, newBlock)
+      DPrintf("%d appended a new block to the blockchain:\n%s", node.me, newBlock.toString())
 
       // Finally, mark all the successful transactions as valid
       for _, txNode := range txNodes {
         node.PendingTxs[txNode.ClerkId].Status = SUCCESS
       }
+      node.numPending -= len(txNodes)
     }
     node.mu.Unlock()
 

@@ -46,7 +46,7 @@ func (ck *Clerk) Post(content string) bool {
   args.Tx = node.Transaction{node.POST, nil, nil, nil, []byte(content)}
   args.ClerkId = ck.clerkId
 
-  DPrintf("%d: trying to post %s", ck.clerkId, content)
+  DPrintf("%d: trying to post \"%s\"", ck.clerkId, content)
 
   for {
     reply := node.AppendTxReply{}

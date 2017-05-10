@@ -4,6 +4,7 @@ import (
   "time"
   "bytes"
   "encoding/binary"
+  "fmt"
 )
 
 const DIFFICULTY = 4
@@ -26,6 +27,21 @@ func packInt(myInt uint32) []byte {
   data := make([]byte, 4)
   binary.LittleEndian.PutUint32(data, myInt)
   return data
+}
+
+
+// Returns a string representation of the block
+func (block *Block) toString() string {
+  var repr string
+  repr  =             "  ------------------------------------------------------------------------------\n"
+  repr += fmt.Sprintf(" / PrevBlock:  %x\n", block.PrevBlock)
+  repr += fmt.Sprintf(" | MerkleRoot: %x\n", block.MerkleRoot)
+  repr += fmt.Sprintf(" | Timestamp:  %d\n", block.Timestamp)
+  repr += fmt.Sprintf(" | Nonce:      %d\n", block.Nonce)
+  repr += fmt.Sprintf(" | Bits:       %d\n", block.Bits)
+  repr += fmt.Sprintf(" \\ BlockHash:  %x\n", block.BlockHash)
+  repr +=             "  ------------------------------------------------------------------------------"
+  return repr
 }
 
 // Given a new block with a provided
@@ -60,7 +76,7 @@ func proofOfWork(block *Block) {
 //
 // Given a list of validated transactions and the current state of the blockchain
 // generates a new valid block using the transactions and returns it
-func GenerateBlock(blockchain []*Block, txNodes []*TxNode) *Block {
+func GenerateBlock(blockchain []*Block, txs []Transaction) *Block {
   newBlock := new(Block)
 
   // PrevBlock
@@ -75,7 +91,7 @@ func GenerateBlock(blockchain []*Block, txNodes []*TxNode) *Block {
 
   // MerkleRoot
   // TODO: get the MerkleRoot working
-  newBlock.MerkleRoot = make([]byte, HASH_NUM_BYTES)
+  newBlock.MerkleRoot = BuildMerkleTreeStore(txs)
 
   // Timestamp
   newBlock.Timestamp = uint32(time.Now().Unix())
@@ -90,11 +106,7 @@ func GenerateBlock(blockchain []*Block, txNodes []*TxNode) *Block {
   proofOfWork(newBlock)
 
   // Transactions
-  transactions := make([]Transaction, len(txNodes))
-  for i, txNode := range txNodes {
-    transactions[i] = txNode.Tx
-  }
-  newBlock.Transactions = transactions
+  newBlock.Transactions = txs
 
   return newBlock
 }

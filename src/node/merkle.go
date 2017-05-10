@@ -4,9 +4,9 @@ package node
 // https://github.com/btcsuite/btcd/blob/d06c0bb181529331be8f8d9350288c420d9e60e4/blockchain/merkle.go
 
 import (
+  "math"
 )
 
-/*
 // nextPowerOfTwo returns the next highest power of two from a given number if
 // it is not already a power of two.  This is a helper function used during the
 // calculation of a merkle tree.
@@ -24,14 +24,13 @@ func nextPowerOfTwo(n int) int {
 // HashMerkleBranches takes two hashes, treated as the left and right tree
 // nodes, and returns the hash of their concatenation.  This is a helper
 // function used to aid in the generation of a merkle tree.
-func HashMerkleBranches(left []byte, right []byte) *chainhash.Hash {
+func HashMerkleBranches(left []byte, right []byte) []byte {
 	// Concatenate the left and right nodes.
-	var hash [HASH_NUM_BYTES * 2]byte
-	copy(hash[:HASH_NUM_BYTES], left[:])
-	copy(hash[HASH_NUM_BYTES:], right[:])
+	var hashData [HASH_NUM_BYTES * 2]byte
+	copy(hashData[:HASH_NUM_BYTES], left[:])
+	copy(hashData[HASH_NUM_BYTES:], right[:])
 
-	newHash := chainhash.DoubleHashH(hash[:])
-	return &newHash
+	return hash(hashData[:])
 }
 
 // BuildMerkleTreeStore creates a merkle tree from a slice of transactions,
@@ -62,7 +61,7 @@ func HashMerkleBranches(left []byte, right []byte) *chainhash.Hash {
 // are calculated by concatenating the left node with itself before hashing.
 // Since this function uses nodes that are pointers to the hashes, empty nodes
 // will be nil.
-func BuildMerkleTreeStore(transactions []*TxNode) []byte {
+func BuildMerkleTreeStore(transactions []Transaction) []byte {
 	// Calculate how many entries are required to hold the binary merkle
 	// tree as a linear array and create an array of that size.
 	nextPoT := nextPowerOfTwo(len(transactions))
@@ -98,5 +97,5 @@ func BuildMerkleTreeStore(transactions []*TxNode) []byte {
 		offset++
 	}
 
-	return merkles
-}*/
+	return merkles[len(merkles) - 1]
+}
