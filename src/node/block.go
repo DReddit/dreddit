@@ -90,7 +90,6 @@ func GenerateBlock(blockchain []*Block, txs []Transaction) *Block {
   }
 
   // MerkleRoot
-  // TODO: get the MerkleRoot working
   newBlock.MerkleRoot = BuildMerkleTreeStore(txs)
 
   // Timestamp
