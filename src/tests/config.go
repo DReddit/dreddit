@@ -1,4 +1,4 @@
-package main
+package tests
 
 import "labrpc"
 import "testing"
@@ -248,7 +248,7 @@ func (cfg *config) StartServer(i int) {
 
 	cfg.mu.Unlock()
 
-	cfg.drNodes[i] = node.StartDRNode(ends, i, cfg.saved[i])
+	cfg.drNodes[i] = node.StartDRNode(i)
 
 	kvsvc := labrpc.MakeService(cfg.drNodes[i])
 	srv := labrpc.MakeServer()
@@ -299,7 +299,7 @@ func make_config(t *testing.T, tag string, n int, unreliable bool) *config {
 	cfg.clerks = make(map[*clerk.Clerk][]string)
 	cfg.nextClientId = cfg.n + 1000 // client ids start 1000 above the highest serverid
 
-	// create a full set of KV servers.
+	// create a full set of DRNode servers.
 	for i := 0; i < cfg.n; i++ {
 		cfg.StartServer(i)
 	}

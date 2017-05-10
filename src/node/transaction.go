@@ -11,7 +11,7 @@ const (
 )
 
 type Transaction struct {
-  Type    int       // the type of transaction
+  Type    uint32    // the type of transaction
   TxIns   []TxIn    // list of input transactions
   TxOuts  []TxOut   // list of output transactions
   Parent  []byte    // hash of referenced transaction (for comment and upvote)
@@ -19,7 +19,7 @@ type Transaction struct {
 }
 
 type TxIn struct {
-  PrevOutput []Output   // reference to corresponding TxOut
+  PrevOutput *TxOut     // reference to corresponding TxOut
   Sig        []byte     // ECDSA signature of entire Transaction (except other sigs and pks)
   PubKey     []byte     // Public key of spender
 }
@@ -28,3 +28,7 @@ type TxOut struct {
   Value      []int64    // amount of DKarma transferred
   PubKeyHash []byte     // hash of public key of the eventual spender
 }
+
+// func (tx *Transaction) Hash() []byte {
+//   return nil
+// }

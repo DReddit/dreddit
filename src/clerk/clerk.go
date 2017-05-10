@@ -5,7 +5,11 @@ import (
   "crypto/rand"
   "math/big"
   "node"
+  "log"
 )
+
+
+const Debug = 1
 
 type Clerk struct {
   servers []*labrpc.ClientEnd
@@ -20,6 +24,13 @@ func nrand() int64 {
   return x
 }
 
+func DPrintf(format string, a ...interface{}) (n int, err error) {
+  if Debug > 0 {
+    log.Printf(format, a...)
+  }
+  return
+}
+
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
   ck := new(Clerk)
   ck.servers = servers
@@ -28,11 +39,11 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
   return ck
 }
 
-func Post(content string) bool {
-  current = ck.current
+func (ck *Clerk) Post(content string) bool {
+  current := ck.current
   args := node.AppendTxArgs{}
 
-  args.Tx = Transaction{POST, nil, nil, nil, []byte(content)}
+  args.Tx = node.Transaction{node.POST, nil, nil, nil, []byte(content)}
   args.ClerkId = ck.clerkId
 
   DPrintf("%d: trying to post %s", ck.clerkId, content)
@@ -43,17 +54,17 @@ func Post(content string) bool {
     if !ok {
       current = (current + 1) % len(ck.servers)
     } else {
-      break
+      if reply.Success {
+        DPrintf("%d: Successful post", ck.clerkId)
+      } else {
+        DPrintf("%d: Transaction invalid", ck.clerkId)
+      }
+
+      return reply.Success
     }
   }
 
-  if reply.Success {
-    DPrintf("%d: Successful post", ck.me)
-  } else {
-    DPrintf("%d: Transaction invalid", ck.me)
-  }
-
-  return reply.Success
+  return false
 }
 
 // TODO make functions for transfer, comment, and upvote

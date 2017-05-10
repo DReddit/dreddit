@@ -4,12 +4,9 @@ package node
 // https://github.com/btcsuite/btcd/blob/d06c0bb181529331be8f8d9350288c420d9e60e4/blockchain/merkle.go
 
 import (
-	"math"
-
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcutil"
 )
 
+/*
 // nextPowerOfTwo returns the next highest power of two from a given number if
 // it is not already a power of two.  This is a helper function used during the
 // calculation of a merkle tree.
@@ -27,11 +24,11 @@ func nextPowerOfTwo(n int) int {
 // HashMerkleBranches takes two hashes, treated as the left and right tree
 // nodes, and returns the hash of their concatenation.  This is a helper
 // function used to aid in the generation of a merkle tree.
-func HashMerkleBranches(left *chainhash.Hash, right *chainhash.Hash) *chainhash.Hash {
+func HashMerkleBranches(left []byte, right []byte) *chainhash.Hash {
 	// Concatenate the left and right nodes.
-	var hash [chainhash.HashSize * 2]byte
-	copy(hash[:chainhash.HashSize], left[:])
-	copy(hash[chainhash.HashSize:], right[:])
+	var hash [HASH_NUM_BYTES * 2]byte
+	copy(hash[:HASH_NUM_BYTES], left[:])
+	copy(hash[HASH_NUM_BYTES:], right[:])
 
 	newHash := chainhash.DoubleHashH(hash[:])
 	return &newHash
@@ -65,12 +62,12 @@ func HashMerkleBranches(left *chainhash.Hash, right *chainhash.Hash) *chainhash.
 // are calculated by concatenating the left node with itself before hashing.
 // Since this function uses nodes that are pointers to the hashes, empty nodes
 // will be nil.
-func BuildMerkleTreeStore(transactions []*btcutil.Tx) []*chainhash.Hash {
+func BuildMerkleTreeStore(transactions []*TxNode) []byte {
 	// Calculate how many entries are required to hold the binary merkle
 	// tree as a linear array and create an array of that size.
 	nextPoT := nextPowerOfTwo(len(transactions))
 	arraySize := nextPoT*2 - 1
-	merkles := make([]*chainhash.Hash, arraySize)
+	merkles := make([][]byte, arraySize)
 
 	// Create the base transaction hashes and populate the array with them.
 	for i, tx := range transactions {
@@ -102,4 +99,4 @@ func BuildMerkleTreeStore(transactions []*btcutil.Tx) []*chainhash.Hash {
 	}
 
 	return merkles
-}
+}*/

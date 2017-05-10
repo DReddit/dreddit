@@ -1,11 +1,7 @@
-package main
+package tests
 
 import (
   "testing"
-  "time"
-  "log"
-  "node"
-  "clerk"
   "fmt"
 )
 
@@ -15,12 +11,15 @@ func TestBasic(t *testing.T) {
   const nclients = 1
   const unreliable = false
   const tag = "basic"
-  cfg = make_config(t, tag, nservers, unreliable)
+  cfg := make_config(t, tag, nservers, unreliable)
   defer cfg.cleanup()
 
   ck := cfg.makeClient(cfg.All())
+  ok := ck.Post("First Post!!!1")
 
-  
+  if !ok {
+    t.Fatal("Attempted Post failed")
+  }
 
   fmt.Printf("  ... Passed\n")
 }

@@ -1,0 +1,3 @@
+GOPATH=$(pwd)
+export GOPATH
+

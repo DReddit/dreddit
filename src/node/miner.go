@@ -1,13 +1,13 @@
 package node
 
 import (
-  "labrpc"
   "log"
   "sync"
+  "time"
 )
 
-const Debug = 0
-const BLOCK_SIZE_THRESHOLD = 10
+const Debug = 1
+const BLOCK_SIZE_THRESHOLD = 1
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -21,8 +21,8 @@ type DRNode struct {
   mu          sync.Mutex     // lock on DRNode's state
   me          int            // id of this node
   numPending  int            // number of pending transactions
-  PendingTxs  map[int]TxNode // map from ClerkId to last pending transaction
-  Blockchain  []Block        // current view of the blockchain
+  PendingTxs  map[int]*TxNode // map from ClerkId to last pending transaction
+  Blockchain  []*Block        // current view of the blockchain
 
   // channels
   chNewTx     chan bool      // channel to inform of new tx
@@ -61,9 +61,11 @@ func (node *DRNode) Kill() {
 
 // Starts DReddit node
 func StartDRNode(me int) *DRNode {
+  DPrintf("Started new DRNode with id %d", me)
   node := new(DRNode)
   node.me = me
-  node.PendingTxs = make(map[int]TxNode)
+  node.PendingTxs = make(map[int]*TxNode)
+  node.Blockchain = make([]*Block, 0)
 
   go node.Mine()
 
@@ -74,8 +76,8 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) {
   DPrintf("%d received AppendTx request from client %d", node.me, args.ClerkId)
   node.mu.Lock()
   // Check that this clerk has no pending transaction already
-  txNode, err := node.PendingTxs[args.ClerkId]
-  if !err && txNode.Status != HANDLED {
+  txNode, ok := node.PendingTxs[args.ClerkId]
+  if ok && txNode.Status != HANDLED {
     DPrintf("%d: client %d already has a pending request", node.me, args.ClerkId)
     reply.Success = false
     node.mu.Unlock()
@@ -83,7 +85,7 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) {
   }
   // Else, add this to pending txs
   // TODO: maybe validate the transction first?
-  node.PendingTxs[args.ClerkId] = TxNode{args.Tx, args.ClerkId, PENDING}
+  node.PendingTxs[args.ClerkId] = &TxNode{args.Tx, args.ClerkId, PENDING}
   node.numPending++
   node.mu.Unlock()
   DPrintf("%d successfully started AppendTx request for client %d", node.me, args.ClerkId)
@@ -121,31 +123,31 @@ func (node *DRNode) Mine() {
 
     // Check if we have enough pending transactions to make a block
     if node.numPending >= BLOCK_SIZE_THRESHOLD {
-      txNodes = make([]TxNode)
+      txNodes := make([]*TxNode, 0)
 
       // First, validate all pending transactions
-      for clerkId, txNode := range node.pendingTxs {
+      for _, txNode := range node.PendingTxs {
         if txNode.Status == PENDING {
           // TODO actually validate the transaction here
           // remember to validate against the entire blockchain PLUS
           // all transactions currently in txNodes!
-          txNodes.append(txNode)
+          txNodes = append(txNodes, txNode)
 
           // If the transaction isn't valid, mark it as such here
         }
       }
 
       // Next generate a block that includes all these transactions
-      newBlock = GenerateBlock(node.Blockchain, txNodes)
+      newBlock := GenerateBlock(node.Blockchain, txNodes)
 
       // Then, advertise our new block to other miners (later)
       // and append our block to the blockchain
-      AppendBlock(node.Blockchain, newBlock)
+      node.Blockchain = append(node.Blockchain, newBlock)
 
       DPrintf("%d appended a new block to the blockchain: %v", node.me, newBlock)
 
       // Finally, mark all the successful transactions as valid
-      for txNode := range txNodes {
+      for _, txNode := range txNodes {
         node.PendingTxs[txNode.ClerkId].Status = SUCCESS
       }
     }
