@@ -9,7 +9,7 @@ import (
 )
 
 
-const Debug = 1
+const Debug = 0
 
 type Clerk struct {
   servers []*labrpc.ClientEnd

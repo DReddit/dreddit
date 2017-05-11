@@ -7,7 +7,6 @@ import (
   "fmt"
 )
 
-const DIFFICULTY = 4
 const HASH_NUM_BYTES = 32
 const DATA_NUM_BYTES = 80
 
@@ -39,7 +38,8 @@ func (block *Block) toString() string {
   repr += fmt.Sprintf(" | Timestamp:  %d\n", block.Timestamp)
   repr += fmt.Sprintf(" | Nonce:      %d\n", block.Nonce)
   repr += fmt.Sprintf(" | Bits:       %d\n", block.Bits)
-  repr += fmt.Sprintf(" \\ BlockHash:  %x\n", block.BlockHash)
+  repr += fmt.Sprintf(" | BlockHash:  %x\n", block.BlockHash)
+  repr += fmt.Sprintf(" \\ # Transactions:  %d\n", len(block.Transactions))
   repr +=             "  ------------------------------------------------------------------------------"
   return repr
 }
@@ -56,15 +56,17 @@ func proofOfWork(block *Block) {
   copy(data[0:4], []byte("\x01\x00\x00\x00")) // Version
   copy(data[4:4 + HASH_NUM_BYTES], block.PrevBlock) // Prev Block Hash
   copy(data[4 + HASH_NUM_BYTES : 4 + 2*HASH_NUM_BYTES], block.MerkleRoot) // Merkle Root
+  // TODO(fortenforge): re-set the timestamp for every pow attempt
   copy(data[4 + 2*HASH_NUM_BYTES : 4 + 2*HASH_NUM_BYTES + 4], packInt(block.Timestamp)) // Timestamp
   copy(data[8 + 2*HASH_NUM_BYTES : 8 + 2*HASH_NUM_BYTES + 4], packInt(block.Bits)) // Bits
 
   nonceIndex := 12 + 2*HASH_NUM_BYTES
   var nonce uint32
+  leadingZeros := make([]byte, block.Bits)
   for {
     copy(data[nonceIndex:nonceIndex + 4], packInt(nonce)) // Nonce
     hash := hash(data)
-    if bytes.Equal(hash[0:1], []byte("\x00")) {
+    if bytes.Equal(hash[0:block.Bits], leadingZeros) {
       block.Nonce = nonce
       block.BlockHash = hash
       return
@@ -99,6 +101,8 @@ func GenerateBlock(blockchain []*Block, txs []Transaction) *Block {
   newBlock.Nonce = 0
 
   // Bits
+  // TODO: Actual cryptocurrencies do something more sophisticated than what we're doing now
+  // https://en.bitcoin.it/wiki/Difficulty
   newBlock.Bits = DIFFICULTY
 
   // BlockHash

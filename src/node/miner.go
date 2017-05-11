@@ -6,8 +6,14 @@ import (
   "time"
 )
 
-const Debug = 1
-const BLOCK_SIZE_THRESHOLD = 1
+const Debug = 0
+
+
+// These parameters are tuned by the tests
+var (
+  BLOCK_SIZE_THRESHOLD = 10
+  DIFFICULTY uint32 = 3
+)
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
   if Debug > 0 {
@@ -158,6 +164,6 @@ func (node *DRNode) Mine() {
     node.mu.Unlock()
 
     // TODO: again, use channels or condition variables here too
-    time.Sleep(time.Millisecond * 100)
+    time.Sleep(time.Millisecond * 1)
   }
 }
