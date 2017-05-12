@@ -63,7 +63,7 @@ func proofOfWork(block *Block) {
   var nonce uint32
   for {
     copy(data[nonceIndex:nonceIndex + 4], packInt(nonce)) // Nonce
-    hash := hash(data)
+    hash := Hash(data)
     if bytes.Equal(hash[0:1], []byte("\x00")) {
       block.Nonce = nonce
       block.BlockHash = hash

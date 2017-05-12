@@ -19,10 +19,12 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 type DRNode struct {
   // Represents state for a DReddit mining node
   mu          sync.Mutex     // lock on DRNode's state
+  utxo_mu          sync.Mutex     // lock on DRNode's UTXO
   me          int            // id of this node
   numPending  int            // number of pending transactions
   PendingTxs  map[int]*TxNode // map from ClerkId to last pending transaction
   Blockchain  []*Block        // current view of the blockchain
+  Utxo				UtxoDb					// utxo
 
   // channels
   chNewTx     chan bool      // channel to inform of new tx
@@ -150,10 +152,16 @@ func (node *DRNode) Mine() {
       DPrintf("%d appended a new block to the blockchain:\n%s", node.me, newBlock.toString())
 
       // Finally, mark all the successful transactions as valid
+			node.utxo_mu.Lock()
       for _, txNode := range txNodes {
         node.PendingTxs[txNode.ClerkId].Status = SUCCESS
-      }
-      node.numPending -= len(txNodes)
+				for idx, txOut := range txNode.Tx.TxOuts {
+					uidx := uint32(idx)
+      		node.Utxo.Entries[string(txNode.Tx.Hash())].outputs[uidx] = &UtxoOutput{false,txOut.PubKeyHash, txOut.Value}
+				}
+			}
+      node.utxo_mu.Unlock()
+			node.numPending -= len(txNodes)
     }
     node.mu.Unlock()
 
