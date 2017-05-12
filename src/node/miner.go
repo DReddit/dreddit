@@ -29,11 +29,13 @@ type DRNode struct {
   port        string
   ports       []string
   servers     []*rpc.Client
+  peermu      sync.Mutex     // lock on the peer list
 
   // channels
   chNewTx     chan bool      // channel to inform of new tx
   chQuit      chan bool      // channel to send Kill message
   chNewBlock  chan bool      // channel to inform of new block
+  gossip      chan GossipReply // the gossip we get back
 }
 
 const (
@@ -74,7 +76,7 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
   node.numPending = 0
   node.Blockchain = make([]*Block, 0)
   node.port = port
-  node.ports = servers
+  node.ports = make([]string, 0)
   node.servers = make([]*rpc.Client, 0)
 
   for _, serverPort := range servers {
@@ -82,6 +84,7 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
     if err == nil {
       DPrintf("%d: Successfully connected to miner at port %d", me, port)
       node.servers = append(node.servers, client)
+      node.ports = append(node.ports, serverPort)
     }
   }
   
@@ -89,10 +92,74 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
   rpc.HandleHTTP()
   l, _ := net.Listen("tcp", "localhost:" + port)
   go http.Serve(l, nil)
-  
+  go node.GossipProtocol()
   go node.Mine()
   
   return node
+}
+
+type GossipArgs struct {
+  Peers []string
+}
+
+type GossipReply struct {
+  Peers []string
+}
+func (node *DRNode) Gossip(args *GossipArgs, reply *GossipReply) error {
+  node.peermu.Lock()
+  reply.Peers = node.peers
+  node.Merge(args.Peers)
+  node.peermu.Unlock()
+}
+
+func (node *DRNode) GossipProtocol() {
+  gossipTimeout := time.NewTimer(time.Duration(1000) * time.Millisecond) // probably should randomize this
+  
+  for {
+    select {
+    case <- gossipTimeout.C:
+      node.peermu.Lock()    
+      args := GossipArgs{Peers:node.ports}
+      for _, client := range node.servers {
+        go func() {
+          reply := node.GossipReply{}
+          err := client.Call("DRNode.Gossip", &args, &reply)
+          if err == nil {
+            node.gossip <- reply
+          }
+        }()
+      }
+      node.peermu.Unlock()
+      gossipTimeout.Reset(time.Duration(1000) * time.Millisecond)
+      
+    case reply := <- node.gossip: // an optimization would be only run merge when a digest of the peer list has changed
+      node.peermu.Lock()
+      node.Merge(reply.Peers)
+      node.peermu.Unlock()
+    }
+  }
+}
+
+func (node *DRNode) Merge(newPeers []string) {
+  // dont need to lock peeks, this function is always called with such a lock being held
+  // very inefficient implementation, ideally should use hash functions
+  for _, port := range newPeers {
+    found := false
+    for _, knownport := range node.peers {
+      if knownport == port {
+        found = true
+        break
+      }
+    }
+    if !found {
+      client, err := rpc.DialHTTP("tcp", "localhost:" + port)
+      if err == nil {
+        DPrintf("%d: Successfully connected to miner at port %d", me, port)
+        node.servers = append(node.servers, client)
+        node.ports = append(node.ports, port)
+      }      
+    }
+  }
 }
 
 func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
