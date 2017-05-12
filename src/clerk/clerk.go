@@ -71,13 +71,13 @@ func (ck *Clerk) GossipProtocol() {
       ck.peermu.Lock()
       args := node.GossipArgs{Port:"-1", Peers:ck.ports}
       for _, client := range ck.servers {
-        go func() {
+        go func(c *rpc.Client) {
           reply := node.GossipReply{}
-          err := client.Call("DRNode.Gossip", &args, &reply)
+          err := c.Call("DRNode.Gossip", &args, &reply)
           if err == nil {
             ck.gossip <- reply
           }
-        }()
+        }(client)
       }
       ck.peermu.Unlock()
       gossipTimeout.Reset(time.Duration(200) * time.Millisecond)

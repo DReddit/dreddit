@@ -148,6 +148,16 @@ type BlockReply struct {
   Blockchain []*Block
 }
 
+type SendBlockArgs struct {
+  SentBlock *Block
+}
+
+type SendBlockReply struct {}
+
+func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error {
+  return nil
+}
+
 func (node *DRNode) GetBlockChain(args *BlockArgs, reply *BlockReply) error {
   node.mu.Lock()
   reply.Blockchain = node.Blockchain
@@ -170,13 +180,13 @@ func (node *DRNode) GossipProtocol() {
       node.peermu.Lock()    
       args := GossipArgs{Port:node.port, Peers:node.ports}
       for _, client := range node.servers {
-        go func() {
+        go func(c *rpc.Client) {
           reply := GossipReply{}
-          err := client.Call("DRNode.Gossip", &args, &reply)
+          err := c.Call("DRNode.Gossip", &args, &reply)
           if err == nil {
             node.gossip <- reply
           }
-        }()
+        }(client)
       }
       node.peermu.Unlock()
       gossipTimeout.Reset(time.Duration(100 + rand.Intn(100)) * time.Millisecond)
@@ -296,6 +306,15 @@ func (node *DRNode) Mine() {
 
       // Next generate a block that includes all these transactions
       newBlock := GenerateBlock(node.Blockchain, txs)
+
+      args := SendBlockArgs{newBlock}
+
+      for _, client := range node.servers {
+        go func(c *rpc.Client) {
+          reply := SendBlockReply{}
+          c.Call("DRNode.SendBlock", &args, &reply)
+        }(client)
+      }
 
       // Then, advertise our new block to other miners (later)
       // and append our block to the blockchain
