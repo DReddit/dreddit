@@ -7,6 +7,7 @@ import (
   "net/rpc"
   "net"
   "net/http"
+  "math/rand"
 )
 
 const Debug = 1
@@ -85,6 +86,16 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
       DPrintf("%d: Successfully connected to miner at port " + serverPort, me)
       node.servers = append(node.servers, client)
       node.ports = append(node.ports, serverPort)
+
+      args := BlockArgs{}
+      reply := BlockReply{}
+      err := client.Call("DRNode.GetBlockChain", &args, &reply) // we don't put this in a goroutine because we want to wait
+      
+      if err == nil {
+        if len(reply.Blockchain) > len(node.Blockchain) {
+          node.Blockchain = reply.Blockchain
+        }
+      }
     }
   }
 
@@ -96,6 +107,7 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
   server.HandleHTTP("/" + port, "/debug/" + port)
   l, _ := net.Listen("tcp", "localhost:" + port)
   go http.Serve(l, nil)
+
   go node.GossipProtocol()
   go node.Mine()
   
@@ -130,11 +142,29 @@ func (node *DRNode) Gossip(args *GossipArgs, reply *GossipReply) error {
   return nil
 }
 
+type BlockArgs struct {}
+
+type BlockReply struct {
+  Blockchain []*Block
+}
+
+func (node *DRNode) GetBlockChain(args *BlockArgs, reply *BlockReply) error {
+  node.mu.Lock()
+  reply.Blockchain = node.Blockchain
+  node.mu.Unlock()
+  return nil
+}
+
 func (node *DRNode) GossipProtocol() {
-  gossipTimeout := time.NewTimer(time.Duration(200) * time.Millisecond) // probably should randomize this
+  gossipTimeout := time.NewTimer(time.Duration(100 + rand.Intn(100)) * time.Millisecond) // probably should randomize this
   
   for {
     select {
+    case reply := <- node.gossip: // an optimization would be only run merge when a digest of the peer list has changed
+      node.peermu.Lock()
+      node.Merge(append(reply.Peers, reply.Port))
+      node.peermu.Unlock()
+      
     case <- gossipTimeout.C:
       DPrintf("Node %d gossiping", node.me)
       node.peermu.Lock()    
@@ -149,12 +179,8 @@ func (node *DRNode) GossipProtocol() {
         }()
       }
       node.peermu.Unlock()
-      gossipTimeout.Reset(time.Duration(200) * time.Millisecond)
+      gossipTimeout.Reset(time.Duration(100 + rand.Intn(100)) * time.Millisecond)
       
-    case reply := <- node.gossip: // an optimization would be only run merge when a digest of the peer list has changed
-      node.peermu.Lock()
-      node.Merge(append(reply.Peers, reply.Port))
-      node.peermu.Unlock()
     }
   }
 }
@@ -195,12 +221,29 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
     node.mu.Unlock()
     return nil
   }
+
+  outStr := ""
+  for _, port := range node.ports {
+    outStr = outStr + " " + port
+  }
+  DPrintf("%d has ports " + outStr, node.me)
+
   // Else, add this to pending txs
   // TODO: maybe validate the transction first?
+  // Important to send different error if the tx is already in the blockchain
   node.PendingTxs[args.ClerkId] = &TxNode{args.Tx, args.ClerkId, PENDING}
   node.numPending++
   node.mu.Unlock()
   DPrintf("%d successfully started AppendTx request for client %d", node.me, args.ClerkId)
+
+  node.peermu.Lock()
+  for _, client := range node.servers {
+        go func(c *rpc.Client) {
+          fakereply := AppendTxReply{}
+          c.Call("DRNode.AppendTx", args, &fakereply)
+        }(client)
+  }
+  node.peermu.Unlock()
 
   for {
     node.mu.Lock()

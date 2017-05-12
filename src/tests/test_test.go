@@ -86,14 +86,14 @@ func TestGossip(t *testing.T) {
   empty := make([]string, 0)
   serverPorts := make([]string, nservers)
 
-  drNodes[0] = node.StartDRNode(0, "47973", empty)
-  serverPorts[0] = "47973"
+  drNodes[0] = node.StartDRNode(0, "47970", empty)
+  serverPorts[0] = "47970"
 
   for i := 1; i < nservers; i++ {
     knownPorts := make([]string, 1)
-    knownPorts[0] = strconv.Itoa(i + 47972)
-    drNodes[i] = node.StartDRNode(i, strconv.Itoa(i + 47973), knownPorts)
-    serverPorts[i] = strconv.Itoa(i + 47973)
+    knownPorts[0] = strconv.Itoa(i + 47969)
+    drNodes[i] = node.StartDRNode(i, strconv.Itoa(i + 47970), knownPorts)
+    serverPorts[i] = strconv.Itoa(i + 47970)
   }
 
   time.Sleep(time.Duration(10000) * time.Millisecond)
@@ -115,6 +115,8 @@ func TestGossip(t *testing.T) {
   if !ok {
     t.Fatal("Attempted Post failed")
   }
+
+  time.Sleep(time.Duration(2000) * time.Millisecond)
 
   fmt.Printf("  ... Passed\n")
 }
