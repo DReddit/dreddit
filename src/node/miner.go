@@ -116,11 +116,16 @@ type GossipReply struct {
   Port  string
   Peers []string
 }
+
 func (node *DRNode) Gossip(args *GossipArgs, reply *GossipReply) error {
   node.peermu.Lock()
   reply.Port = node.port
   reply.Peers = node.ports
-  node.Merge(append(args.Peers, args.Port))
+  if args.Port != "-1" {
+    node.Merge(append(args.Peers, args.Port))
+  } else {
+    node.Merge(args.Peers)
+  }
   node.peermu.Unlock()
   return nil
 }
