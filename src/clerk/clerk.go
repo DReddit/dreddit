@@ -1,9 +1,9 @@
 package clerk
 
 import (
-  "labrpc"
   "crypto/rand"
   "math/big"
+  "net/rpc"
   "node"
   "log"
 )
@@ -12,7 +12,9 @@ import (
 const Debug = 1
 
 type Clerk struct {
-  servers []*labrpc.ClientEnd
+  port    string
+  ports   []string
+  servers []*rpc.Client
   clerkId int  // the unique id of this clerk
   current int  // the current server that this clerk will talk to
 }
@@ -31,11 +33,23 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
   return
 }
 
-func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
+func MakeClerk(port string, servers []string) *Clerk {
   ck := new(Clerk)
-  ck.servers = servers
+  ck.ports = servers
   ck.clerkId = int(nrand())
   ck.current = 0
+
+  ck.port = port
+  ck.servers = make([]*rpc.Client, 0)
+
+  for _, serverPort := range servers {
+    client, err := rpc.DialHTTP("tcp", "localhost:" + serverPort)
+    if err == nil {
+      DPrintf("%d: Successfully connected to miner at port %d", ck.clerkId, port)
+      ck.servers = append(ck.servers, client)
+    }
+  }
+  
   return ck
 }
 
@@ -50,8 +64,8 @@ func (ck *Clerk) Post(content string) bool {
 
   for {
     reply := node.AppendTxReply{}
-    ok := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
-    if !ok {
+    err := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
+    if err != nil {
       current = (current + 1) % len(ck.servers)
     } else {
       if reply.Success {

@@ -4,6 +4,9 @@ import (
   "log"
   "sync"
   "time"
+  "net/rpc"
+  "net"
+  "net/http"
 )
 
 const Debug = 1
@@ -23,6 +26,9 @@ type DRNode struct {
   numPending  int            // number of pending transactions
   PendingTxs  map[int]*TxNode // map from ClerkId to last pending transaction
   Blockchain  []*Block        // current view of the blockchain
+  port        string
+  ports       []string
+  servers     []*rpc.Client
 
   // channels
   chNewTx     chan bool      // channel to inform of new tx
@@ -60,20 +66,36 @@ func (node *DRNode) Kill() {
 }
 
 // Starts DReddit node
-func StartDRNode(me int) *DRNode {
+func StartDRNode(me int, port string, servers []string) *DRNode {
   DPrintf("Started new DRNode with id %d", me)
   node := new(DRNode)
   node.me = me
   node.PendingTxs = make(map[int]*TxNode)
   node.numPending = 0
   node.Blockchain = make([]*Block, 0)
+  node.port = port
+  node.ports = servers
+  node.servers = make([]*rpc.Client, 0)
 
+  for _, serverPort := range servers {
+    client, err := rpc.DialHTTP("tcp", "localhost:" + serverPort)
+    if err == nil {
+      DPrintf("%d: Successfully connected to miner at port %d", me, port)
+      node.servers = append(node.servers, client)
+    }
+  }
+  
+  rpc.Register(node)
+  rpc.HandleHTTP()
+  l, _ := net.Listen("tcp", "localhost:" + port)
+  go http.Serve(l, nil)
+  
   go node.Mine()
-
+  
   return node
 }
 
-func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) {
+func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
   DPrintf("%d received AppendTx request from client %d", node.me, args.ClerkId)
   node.mu.Lock()
   // Check that this clerk has no pending transaction already
@@ -82,7 +104,7 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) {
     DPrintf("%d: client %d already has a pending request", node.me, args.ClerkId)
     reply.Success = false
     node.mu.Unlock()
-    return
+    return nil
   }
   // Else, add this to pending txs
   // TODO: maybe validate the transction first?
@@ -98,14 +120,14 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) {
       node.PendingTxs[args.ClerkId].Status = HANDLED
       node.mu.Unlock()
       DPrintf("%d successfully completed AppendTx request for client %d", node.me, args.ClerkId)
-      return
+      return nil
     }
     if node.PendingTxs[args.ClerkId].Status == INVALID {
       reply.Success = false
       node.PendingTxs[args.ClerkId].Status = HANDLED
       node.mu.Unlock()
       DPrintf("%d's AppendTx request from client %d failed", node.me, args.ClerkId)
-      return
+      return nil
     }
     node.mu.Unlock()
 
