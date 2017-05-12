@@ -43,9 +43,9 @@ func MakeClerk(port string, servers []string) *Clerk {
   ck.servers = make([]*rpc.Client, 0)
 
   for _, serverPort := range servers {
-    client, err := rpc.DialHTTP("tcp", "localhost:" + serverPort)
+    client, err := rpc.DialHTTPPath("tcp", "localhost:" + serverPort, "/" + serverPort)
     if err == nil {
-      DPrintf("%d: Successfully connected to miner at port %d", ck.clerkId, port)
+      DPrintf("%d: Successfully connected to miner at port " + serverPort, ck.clerkId)
       ck.servers = append(ck.servers, client)
     }
   }

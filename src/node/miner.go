@@ -80,16 +80,20 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
   node.servers = make([]*rpc.Client, 0)
 
   for _, serverPort := range servers {
-    client, err := rpc.DialHTTP("tcp", "localhost:" + serverPort)
+    client, err := rpc.DialHTTPPath("tcp", "localhost:" + serverPort, "/" + serverPort)
     if err == nil {
-      DPrintf("%d: Successfully connected to miner at port %d", me, port)
+      DPrintf("%d: Successfully connected to miner at port " + serverPort, me)
       node.servers = append(node.servers, client)
       node.ports = append(node.ports, serverPort)
     }
   }
-  
-  rpc.Register(node)
-  rpc.HandleHTTP()
+
+  DPrintf(rpc.DefaultRPCPath)
+  DPrintf(rpc.DefaultDebugPath)
+
+  server := rpc.NewServer()
+  server.RegisterName("DRNode", node)
+  server.HandleHTTP("/" + port, "/debug/" + port)
   l, _ := net.Listen("tcp", "localhost:" + port)
   go http.Serve(l, nil)
   go node.GossipProtocol()
@@ -98,31 +102,41 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
   return node
 }
 
+// used purely for testing
+func (node *DRNode) GetPeerSize() int{ 
+  return len(node.ports)
+}
+
 type GossipArgs struct {
+  Port  string
   Peers []string
 }
 
 type GossipReply struct {
+  Port  string
   Peers []string
 }
 func (node *DRNode) Gossip(args *GossipArgs, reply *GossipReply) error {
   node.peermu.Lock()
-  reply.Peers = node.peers
-  node.Merge(args.Peers)
+  reply.Port = node.port
+  reply.Peers = node.ports
+  node.Merge(append(args.Peers, args.Port))
   node.peermu.Unlock()
+  return nil
 }
 
 func (node *DRNode) GossipProtocol() {
-  gossipTimeout := time.NewTimer(time.Duration(1000) * time.Millisecond) // probably should randomize this
+  gossipTimeout := time.NewTimer(time.Duration(200) * time.Millisecond) // probably should randomize this
   
   for {
     select {
     case <- gossipTimeout.C:
+      DPrintf("Node %d gossiping", node.me)
       node.peermu.Lock()    
-      args := GossipArgs{Peers:node.ports}
+      args := GossipArgs{Port:node.port, Peers:node.ports}
       for _, client := range node.servers {
         go func() {
-          reply := node.GossipReply{}
+          reply := GossipReply{}
           err := client.Call("DRNode.Gossip", &args, &reply)
           if err == nil {
             node.gossip <- reply
@@ -130,31 +144,34 @@ func (node *DRNode) GossipProtocol() {
         }()
       }
       node.peermu.Unlock()
-      gossipTimeout.Reset(time.Duration(1000) * time.Millisecond)
+      gossipTimeout.Reset(time.Duration(200) * time.Millisecond)
       
     case reply := <- node.gossip: // an optimization would be only run merge when a digest of the peer list has changed
       node.peermu.Lock()
-      node.Merge(reply.Peers)
+      node.Merge(append(reply.Peers, reply.Port))
       node.peermu.Unlock()
     }
   }
 }
 
 func (node *DRNode) Merge(newPeers []string) {
-  // dont need to lock peeks, this function is always called with such a lock being held
+  // dont need to lock peers, this function is always called with such a lock being held
   // very inefficient implementation, ideally should use hash functions
   for _, port := range newPeers {
+    if port == node.port {
+      continue
+    }
     found := false
-    for _, knownport := range node.peers {
+    for _, knownport := range node.ports {
       if knownport == port {
         found = true
         break
       }
     }
     if !found {
-      client, err := rpc.DialHTTP("tcp", "localhost:" + port)
+      client, err := rpc.DialHTTPPath("tcp", "localhost:" + port, "/" + port)
       if err == nil {
-        DPrintf("%d: Successfully connected to miner at port %d", me, port)
+        DPrintf("%d: Successfully connected to miner at port " + port, node.me)
         node.servers = append(node.servers, client)
         node.ports = append(node.ports, port)
       }      
