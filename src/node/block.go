@@ -76,12 +76,22 @@ func proofOfWork(block *Block) {
 }
 
 func GenerateGenesisBlock() *Block {
-	txouts := make([]TxOut, 1)
-	pubKeyHashes := make([]([]byte), 1)
-	pubKeyHashes[0], _ = base64.StdEncoding.DecodeString("uhVWws4xgu/N9lba+5pg6v3XKGY=")
-
+	txouts := make([]TxOut, 10)
+	pubKeyHashB64 := make([]string, 10)
+	pubKeyHashB64[0] = "ekZtvHY9XwiGbnzyVOvvMhCEDSE="
+	pubKeyHashB64[1] = "2WTu40XZmDEeVXplZMMbRLcp0Aw="
+	pubKeyHashB64[2] = "xR48QqPrOIR+aEoAigBVXIXfvrI="
+	pubKeyHashB64[3] = "Fag0WPJefAQmrE1tiiKQOrzkwJ0="
+	pubKeyHashB64[4] = "gy0QaOI+3nI16oz6lnmuA8zGzGk="
+	pubKeyHashB64[5] = "cPeHP2/uyu7tuzOptqgL9Y3R3/I="
+	pubKeyHashB64[6] = "uhVWws4xgu/N9lba+5pg6v3XKGY="
+	pubKeyHashB64[7] = "uSAfThFpURu+7MN7Dl4YOQWgO/8="
+	pubKeyHashB64[8] = "qyfnaoRKUnFTdgVLp+20YC1KTVk="
+ 	pubKeyHashB64[9] = "IJMO7/8wIeyS1/gVDEiZvXoLt4E="
+	
 	for i, _ := range txouts {
-		txouts[i] = TxOut{100, pubKeyHashes[i]}
+		pkHash, _ := base64.StdEncoding.DecodeString(pubKeyHashB64[i])
+		txouts[i] = TxOut{100, pkHash}
 	}
 	
 	tx := Transaction{COINBASE, nil, txouts, nil, nil}

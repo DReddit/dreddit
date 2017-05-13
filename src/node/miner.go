@@ -1,6 +1,11 @@
 package node
 
 import (
+	"bytes"
+	"errors"
+	"encoding/base64"
+	"github.com/btcsuite/btcd/btcec"
+	"fmt"
   "log"
   "sync"
   "time"
@@ -79,16 +84,38 @@ func StartDRNode(me int) *DRNode {
   return node
 }
 
-func (node *DRNode) ValidateTransaction(tx Transaction) {
+func (node *DRNode) UpdateUtxoDb(tx Transaction) {
+	for _ , txIn := range tx.TxIns {
+		txHash := string(txIn.PrevTxHash)
+		uidx := txIn.PrevTxOutIndex
+		utxoEntry, ok := node.Utxo.Entries[txHash]
+		if ok {
+			utxoEntry.outputs[uidx].Spent = true
+			// if remaining outputs of this transaction are all spent, remove tx from utxo
+			removeTx := true
+			for _, utxoOutput := range utxoEntry.outputs {
+				if utxoOutput.Spent == false {
+					removeTx = false
+					break
+				}
+			}
+			if removeTx {
+				delete(node.Utxo.Entries, txHash)
+			}
+		} else {
+			// This shouldn't happen if validation is successful
+		}
+	}
+
+	txHash := string(tx.Hash())
 	for idx, txOut := range tx.TxOuts {
-		txHash := string(tx.Hash())
 		uidx := uint32(idx)
 		if _, ok := node.Utxo.Entries[txHash]; !ok {
 			node.Utxo.Entries[txHash] = new(UtxoEntry)
 			node.Utxo.Entries[txHash].outputs = make(map[uint32]*UtxoOutput)
 		}
 		node.Utxo.Entries[txHash].outputs[uidx] = &UtxoOutput{false,txOut.PubKeyHash, txOut.Value}
-		DPrintf("Successful transaction in UTXO: %v %v", txOut.PubKeyHash, txOut.Value)
+		DPrintf("Successfully Updated UTXO: %v %v", base64.StdEncoding.EncodeToString(txOut.PubKeyHash), txOut.Value)
 	}
 
 }
@@ -106,7 +133,7 @@ func (node *DRNode) Bootstrap() {
 	node.Utxo.Entries = make(map[string]*UtxoEntry)
 	for _, block := range node.Blockchain {
 		for _, tx := range block.Transactions {
-			node.ValidateTransaction(tx)	
+			node.UpdateUtxoDb(tx)	
 		}
 	}
 }
@@ -171,10 +198,17 @@ func (node *DRNode) Mine() {
           // TODO actually validate the transaction here
           // remember to validate against the entire blockchain PLUS
           // all transactions currently in txNodes!
-          txs = append(txs, txNode.Tx)
-          txNodes = append(txNodes, txNode)
+
+					succ, err := node.ValidateTransaction(&txNode.Tx)
 
           // If the transaction isn't valid, mark it as such here
+    			if !succ {
+						DPrintf("Error while validating transaction: %v", err)
+						node.PendingTxs[txNode.ClerkId].Status = INVALID 
+					} else {
+          	txs = append(txs, txNode.Tx)
+          	txNodes = append(txNodes, txNode)
+					}
         }
       }
 
@@ -191,7 +225,7 @@ func (node *DRNode) Mine() {
 			node.utxoMu.Lock()
       for _, txNode := range txNodes {
         node.PendingTxs[txNode.ClerkId].Status = SUCCESS
-				node.ValidateTransaction(txNode.Tx)
+				node.UpdateUtxoDb(txNode.Tx)
 			}
       node.utxoMu.Unlock()
 			node.numPending -= len(txNodes)
@@ -201,4 +235,54 @@ func (node *DRNode) Mine() {
     // TODO: again, use channels or condition variables here too
     time.Sleep(time.Millisecond * 100)
   }
+}
+
+func (node *DRNode) VerifySignature(txIn *TxIn, txHashNoSig []byte) bool {
+	signature, err := btcec.ParseSignature(txIn.Sig, btcec.S256())
+	if err != nil {
+			fmt.Println(err)
+			return false
+	}
+	pubKey, err := btcec.ParsePubKey(txIn.PubKey, btcec.S256())
+	if err != nil {
+			fmt.Println(err)
+			return false
+	}
+	return signature.Verify(txHashNoSig, pubKey)
+}
+
+func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
+	DPrintf("%d validating transaction %v", node.me, tx.Id())
+	
+	// TxIn & TxOut are not empty
+	if len(tx.TxIns) == 0 || len(tx.TxOuts) == 0 {
+		return false, errors.New("TxIns and TxOuts must not be empty")
+	}
+	
+	// Sum of Inputs is greater than sum of outputs
+	var inputSum uint32
+	var outputSum uint32
+	for _, txIn := range tx.TxIns {
+		utxoEntry, ok := node.Utxo.Entries[string(txIn.PrevTxHash)]
+		if ok && utxoEntry.outputs[txIn.PrevTxOutIndex].Spent == false {
+			
+			// if valid txIn, validate signature
+			node.VerifySignature(&txIn, tx.HashNoSig())
+
+			// validate hash(pubkey) == pubkeyhash of output
+			if !(bytes.Equal(utxoEntry.outputs[txIn.PrevTxOutIndex].PubKeyHash, PKHash(txIn.PubKey))) {
+				return false, errors.New("PubKeyHashes don't match")	
+			}
+			
+			inputSum += utxoEntry.outputs[txIn.PrevTxOutIndex].Value
+			
+		} else {
+			return false, errors.New("Invalid input transaction provided: missing or spent")
+		}
+	}	
+	for _, txOut := range tx.TxOuts {
+		outputSum += txOut.Value
+	}	
+
+	return true, nil
 }

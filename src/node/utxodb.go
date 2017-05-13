@@ -2,6 +2,7 @@ package node
 
 import (
 	"bytes"
+	"encoding/base64"
 )
 
 type UtxoOutput struct {
@@ -26,9 +27,11 @@ type UnspentTx struct {
 }
 
 func (utxodb *UtxoDb) GetUnspentTxs(pubkeyHash []byte) ([]UnspentTx, bool){
+	DPrintf("pubkeyHash: %v", base64.StdEncoding.EncodeToString(pubkeyHash))
 	var out []UnspentTx	
 	for txHash, utxoEntry := range utxodb.Entries {
 		for txOutIndex, utxoOut := range utxoEntry.outputs {
+			//DPrintf("txHash: %v, txOutIndex: %v, pubkeyHash: %v", base64.StdEncoding.EncodeToString([]byte(txHash)), txOutIndex, base64.StdEncoding.EncodeToString(utxoOut.PubKeyHash))
 			if utxoOut.Spent == false && bytes.Equal(utxoOut.PubKeyHash, pubkeyHash) {
 					out = append(out, UnspentTx{[]byte(txHash), txOutIndex, utxoOut.Value})
 			}
@@ -55,9 +58,7 @@ type GetUtxoReply struct {
 func (node *DRNode) GetUtxo(args *GetUtxoArgs, reply *GetUtxoReply) {
   DPrintf("%d received GetUtxo request from client %d", node.me, args.ClerkId)
   node.utxoMu.Lock()
-	utx, succ := node.Utxo.GetUnspentTxs(args.PubKeyHash)
-	DPrintf("%v %v", utx, succ)
-
 	reply.UnspentTxs, reply.Success = node.Utxo.GetUnspentTxs(args.PubKeyHash)
+	DPrintf("%v %v", reply.UnspentTxs, reply.Success)
   node.utxoMu.Unlock()
 }

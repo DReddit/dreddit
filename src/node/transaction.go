@@ -1,6 +1,7 @@
 package node
 
 import (
+  "encoding/base64"
 )
 
 const (
@@ -56,6 +57,10 @@ func (txOut *TxOut) pack() []byte {
   copy(data[0:4], packInt(txOut.Value)) // Value
   copy(data[4:4 + PKHASH_NUM_BYTES], txOut.PubKeyHash) // PubKeyHash
   return data
+}
+
+func (tx *Transaction) Id() string {
+  return base64.StdEncoding.EncodeToString(tx.Hash())
 }
 
 func (tx *Transaction) Hash() []byte {

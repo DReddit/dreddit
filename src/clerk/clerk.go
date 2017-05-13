@@ -61,7 +61,6 @@ func (ck *Clerk) SignTx(tx *node.Transaction) {
 	}
   for _, txIn := range tx.TxIns {
     txIn.Sig = sig.Serialize()
-    txIn.PubKey = privKey.PubKey().SerializeCompressed()
   }
 }
 
@@ -102,13 +101,13 @@ func (ck *Clerk) Post(content string) bool {
 	var txFee uint32
 	priv := ck.privKey
  	pubkeyHash := node.PKHash(priv.PubKey().SerializeCompressed())
-	DPrintf("PubKeyHash: %v", pubkeyHash)
+	DPrintf("%d: PubKeyHash: %v", ck.clerkId, base64.StdEncoding.EncodeToString(pubkeyHash))
 	unspentTxs, succ := ck.QueryUtxo(pubkeyHash)	
 	if succ == false {
 		DPrintf("No valid output transactions to spend. Aborting Transaction")	
 		return false
 	}
-	fmt.Println(unspentTxs)
+	//fmt.Println(unspentTxs)
 	utx := unspentTxs[0]
 	
 	txIns := make([]node.TxIn, 1)
@@ -122,12 +121,12 @@ func (ck *Clerk) Post(content string) bool {
 	txOuts := make([]node.TxOut, 1)
 	txOuts[0] = ptsTx
 
+	//txIns = make([]node.TxIn,0)
   Tx := node.Transaction{node.POST, txIns, txOuts, nil, []byte(content)}
 	ck.SignTx(&Tx)
-
-  args.Tx = Tx 
+	
+	args.Tx = Tx 
   args.ClerkId = ck.clerkId
-
   DPrintf("%d: trying to post \"%s\"", ck.clerkId, content)
 
   for {
