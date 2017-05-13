@@ -19,12 +19,12 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 type DRNode struct {
   // Represents state for a DReddit mining node
   mu          sync.Mutex     // lock on DRNode's state
-  utxo_mu          sync.Mutex     // lock on DRNode's UTXO
+  utxoMu          sync.Mutex     // lock on DRNode's UTXO
   me          int            // id of this node
   numPending  int            // number of pending transactions
   PendingTxs  map[int]*TxNode // map from ClerkId to last pending transaction
   Blockchain  []*Block        // current view of the blockchain
-  Utxo				UtxoDb					// utxo
+  Utxo				*UtxoDb					// utxo
 
   // channels
   chNewTx     chan bool      // channel to inform of new tx
@@ -70,9 +70,45 @@ func StartDRNode(me int) *DRNode {
   node.numPending = 0
   node.Blockchain = make([]*Block, 0)
 
+	node.Bootstrap()
+	for _, block := range node.Blockchain  {
+		DPrintf("%v", block.toString())
+	}
   go node.Mine()
 
   return node
+}
+
+func (node *DRNode) ValidateTransaction(tx Transaction) {
+	for idx, txOut := range tx.TxOuts {
+		txHash := string(tx.Hash())
+		uidx := uint32(idx)
+		if _, ok := node.Utxo.Entries[txHash]; !ok {
+			node.Utxo.Entries[txHash] = new(UtxoEntry)
+			node.Utxo.Entries[txHash].outputs = make(map[uint32]*UtxoOutput)
+		}
+		node.Utxo.Entries[txHash].outputs[uidx] = &UtxoOutput{false,txOut.PubKeyHash, txOut.Value}
+		DPrintf("Successful transaction in UTXO: %v %v", txOut.PubKeyHash, txOut.Value)
+	}
+
+}
+
+// Bootstrapping mining node 
+// - give initial genesis block
+// - fill utxo accordingly
+func (node *DRNode) Bootstrap() {
+	DPrintf("DRNode %d: boostrapping blockchain", node.me)
+	node.Blockchain = make([]*Block, 0)
+	genesisBlock := GenerateGenesisBlock()
+	node.Blockchain = append(node.Blockchain, genesisBlock)
+
+	node.Utxo = new(UtxoDb)
+	node.Utxo.Entries = make(map[string]*UtxoEntry)
+	for _, block := range node.Blockchain {
+		for _, tx := range block.Transactions {
+			node.ValidateTransaction(tx)	
+		}
+	}
 }
 
 func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) {
@@ -152,15 +188,12 @@ func (node *DRNode) Mine() {
       DPrintf("%d appended a new block to the blockchain:\n%s", node.me, newBlock.toString())
 
       // Finally, mark all the successful transactions as valid
-			node.utxo_mu.Lock()
+			node.utxoMu.Lock()
       for _, txNode := range txNodes {
         node.PendingTxs[txNode.ClerkId].Status = SUCCESS
-				for idx, txOut := range txNode.Tx.TxOuts {
-					uidx := uint32(idx)
-      		node.Utxo.Entries[string(txNode.Tx.Hash())].outputs[uidx] = &UtxoOutput{false,txOut.PubKeyHash, txOut.Value}
-				}
+				node.ValidateTransaction(txNode.Tx)
 			}
-      node.utxo_mu.Unlock()
+      node.utxoMu.Unlock()
 			node.numPending -= len(txNodes)
     }
     node.mu.Unlock()

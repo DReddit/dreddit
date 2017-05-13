@@ -4,11 +4,13 @@ import (
   "time"
   "bytes"
   "encoding/binary"
+  "encoding/base64"
   "fmt"
 )
 
 const DIFFICULTY = 4
 const HASH_NUM_BYTES = 32
+const PKHASH_NUM_BYTES = 20
 const DATA_NUM_BYTES = 80
 
 type Block struct {
@@ -71,6 +73,42 @@ func proofOfWork(block *Block) {
     }
     nonce++
   }
+}
+
+func GenerateGenesisBlock() *Block {
+	txouts := make([]TxOut, 1)
+	pubKeyHashes := make([]([]byte), 1)
+	pubKeyHashes[0], _ = base64.StdEncoding.DecodeString("uhVWws4xgu/N9lba+5pg6v3XKGY=")
+
+	for i, _ := range txouts {
+		txouts[i] = TxOut{100, pubKeyHashes[i]}
+	}
+	
+	tx := Transaction{COINBASE, nil, txouts, nil, nil}
+	txs := []Transaction{tx}
+  genesisBlock := new(Block)
+	genesisBlock.PrevBlock = make([]byte, HASH_NUM_BYTES)
+
+  // MerkleRoot
+  genesisBlock.MerkleRoot = BuildMerkleTreeStore(txs)
+
+  // Timestamp
+  genesisBlock.Timestamp = uint32(1494688622)
+	DPrintf("%v", genesisBlock.Timestamp)
+
+  // Nonce
+  genesisBlock.Nonce = 0
+
+  // Bits
+  genesisBlock.Bits = DIFFICULTY
+
+	// BlockHash
+	proofOfWork(genesisBlock)
+
+  // Transactions
+  genesisBlock.Transactions = txs
+
+  return genesisBlock	
 }
 
 //

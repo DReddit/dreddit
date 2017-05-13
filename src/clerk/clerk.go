@@ -8,7 +8,7 @@ import (
   "node"
   "log"
 	"fmt"
-	"encoding/hex"
+	"encoding/base64"
 )
 
 
@@ -41,16 +41,14 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
   ck.servers = servers
   ck.clerkId = int(nrand())
   ck.current = 0
-	// Decode a hex-encoded private key.
-	pkBytes, err := hex.DecodeString("22a47fa09a223f2aa079edf85a7c2d4f87" +
-			"20ee63e502ee2869afab7de234b80c")
+	// Decode a b64-encoded private key.
+	pkBytes, err := base64.StdEncoding.DecodeString("p4BuPO9r2e4Wl/45lVCEzDaFnP2k3IfALlTxF4vwMHg=")
 	if err != nil {
 			fmt.Println(err)
 			return nil
 	}
 
 	ck.privKey, _ = btcec.PrivKeyFromBytes(btcec.S256(), pkBytes)
-  //ck.privKey, err := GenerateKey(c, rand.Reader)
   return ck
 }
 
@@ -63,15 +61,16 @@ func (ck *Clerk) SignTx(tx *node.Transaction) {
 	}
   for _, txIn := range tx.TxIns {
     txIn.Sig = sig.Serialize()
-    txIn.PubKey = privKey.PubKey().SerializeUncompressed()
+    txIn.PubKey = privKey.PubKey().SerializeCompressed()
   }
 }
 
-func (ck *Clerk) QueryUtxo(pubkeyHash []byte) ([]node.UnspentTx, bool) {
+func (ck *Clerk) QueryUtxo(pubKeyHash []byte) ([]node.UnspentTx, bool) {
   current := ck.current
 	success := false
 	args := node.GetUtxoArgs{}
 	args.ClerkId = ck.clerkId
+	args.PubKeyHash = pubKeyHash
   for {
     reply := node.GetUtxoReply{}
     ok := ck.servers[current].Call("DRNode.GetUtxo", &args, &reply)
@@ -102,7 +101,8 @@ func (ck *Clerk) Post(content string) bool {
 	var inputSum uint32
 	var txFee uint32
 	priv := ck.privKey
- 	pubkeyHash := node.Hash(priv.PubKey().SerializeUncompressed())
+ 	pubkeyHash := node.PKHash(priv.PubKey().SerializeCompressed())
+	DPrintf("PubKeyHash: %v", pubkeyHash)
 	unspentTxs, succ := ck.QueryUtxo(pubkeyHash)	
 	if succ == false {
 		DPrintf("No valid output transactions to spend. Aborting Transaction")	
@@ -114,7 +114,7 @@ func (ck *Clerk) Post(content string) bool {
 	txIns := make([]node.TxIn, 1)
 	txIns[0].PrevTxHash = utx.TxHash
 	txIns[0].PrevTxOutIndex = utx.TxOutIndex
-	txIns[0].PubKey = priv.PubKey().SerializeUncompressed()
+	txIns[0].PubKey = priv.PubKey().SerializeCompressed()
 	inputSum += utx.Value
 
 	// give self amount of input - transaction fee		

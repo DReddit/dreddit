@@ -54,10 +54,10 @@ type GetUtxoReply struct {
 
 func (node *DRNode) GetUtxo(args *GetUtxoArgs, reply *GetUtxoReply) {
   DPrintf("%d received GetUtxo request from client %d", node.me, args.ClerkId)
-  node.utxo_mu.Lock()
+  node.utxoMu.Lock()
 	utx, succ := node.Utxo.GetUnspentTxs(args.PubKeyHash)
 	DPrintf("%v %v", utx, succ)
 
 	reply.UnspentTxs, reply.Success = node.Utxo.GetUnspentTxs(args.PubKeyHash)
-  node.utxo_mu.Unlock()
+  node.utxoMu.Unlock()
 }

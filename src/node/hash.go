@@ -10,3 +10,8 @@ func Hash(data []byte) []byte {
   dk, _ := scrypt.Key(data, data, 1024, 1, 1, 32)
   return dk
 }
+
+func PKHash(data []byte) []byte {
+  dk, _ := scrypt.Key(data, data, 1024, 1, 1, 20)
+  return dk
+}

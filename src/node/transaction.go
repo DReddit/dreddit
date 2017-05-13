@@ -4,6 +4,7 @@ import (
 )
 
 const (
+  COINBASE = iota
   TRANSFER = iota
   POST = iota
   COMMENT = iota
@@ -53,7 +54,7 @@ func (txIn *TxIn) packNoSig() []byte {
 func (txOut *TxOut) pack() []byte {
   data := make([]byte, 4 + len(txOut.PubKeyHash))
   copy(data[0:4], packInt(txOut.Value)) // Value
-  copy(data[4:4 + HASH_NUM_BYTES], txOut.PubKeyHash) // PubKeyHash
+  copy(data[4:4 + PKHASH_NUM_BYTES], txOut.PubKeyHash) // PubKeyHash
   return data
 }
 
