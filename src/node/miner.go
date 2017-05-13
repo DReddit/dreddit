@@ -31,12 +31,14 @@ type DRNode struct {
   ports       []string
   servers     []*rpc.Client
   peermu      sync.Mutex     // lock on the peer list
+  listener    net.Listener
 
   // channels
   chNewTx     chan bool      // channel to inform of new tx
   chQuit      chan bool      // channel to send Kill message
   chNewBlock  chan bool      // channel to inform of new block
   gossip      chan GossipReply // the gossip we get back
+  quit        chan int
 }
 
 const (
@@ -65,7 +67,12 @@ type AppendTxReply struct {
 
 // Kills this node
 func (node *DRNode) Kill() {
+  close(node.quit)
+  node.listener.Close()
 
+  for i := 0; i < len(node.servers); i++ {
+    node.servers[i].Close()
+  }
 }
 
 // Starts DReddit node
@@ -79,6 +86,8 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
   node.port = port
   node.ports = make([]string, 0)
   node.servers = make([]*rpc.Client, 0)
+
+  node.quit = make(chan int)
 
   for _, serverPort := range servers {
     client, err := rpc.DialHTTPPath("tcp", "localhost:" + serverPort, "/" + serverPort)
@@ -106,6 +115,7 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
   server.RegisterName("DRNode", node)
   server.HandleHTTP("/" + port, "/debug/" + port)
   l, _ := net.Listen("tcp", "localhost:" + port)
+  node.listener = l
   go http.Serve(l, nil)
 
   go node.GossipProtocol()
@@ -170,6 +180,8 @@ func (node *DRNode) GossipProtocol() {
   
   for {
     select {
+    case <- node.quit:
+      return
     case reply := <- node.gossip: // an optimization would be only run merge when a digest of the peer list has changed
       node.peermu.Lock()
       node.Merge(append(reply.Peers, reply.Port))
@@ -284,6 +296,12 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
 // and attempts to mine a block
 func (node *DRNode) Mine() {
   for {
+    select {
+    case <- node.quit:
+      return
+    default:
+    }
+
     node.mu.Lock()
 
     // Check if we have enough pending transactions to make a block
