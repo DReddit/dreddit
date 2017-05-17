@@ -108,7 +108,7 @@ func TestGossip(t *testing.T) {
 
   defer cleanUp(drNodes)
 
-  time.Sleep(time.Duration(10000) * time.Millisecond)
+  time.Sleep(time.Duration(3000) * time.Millisecond)
 
   for i := 0; i < nservers; i++ {
     size := drNodes[i].GetPeerSize()

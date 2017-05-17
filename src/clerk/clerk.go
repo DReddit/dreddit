@@ -48,7 +48,7 @@ func MakeClerk(port string, servers []string) *Clerk {
   ck.servers = make([]*rpc.Client, 0)
 
   for _, serverPort := range servers {
-    client, err := rpc.DialHTTPPath("tcp", "localhost:" + serverPort, "/" + serverPort)
+    client, err := rpc.DialHTTPPath("tcp", "localhost:" + serverPort, "/dreddit" + serverPort)
     if err == nil {
       DPrintf("%d: Successfully connected to miner at port " + serverPort, ck.clerkId)
       ck.servers = append(ck.servers, client)
@@ -102,7 +102,7 @@ func (ck *Clerk) Merge(newPeers []string) {
       }
     }
     if !found {
-      client, err := rpc.DialHTTPPath("tcp", "localhost:" + port, "/" + port)
+      client, err := rpc.DialHTTPPath("tcp", "localhost:" + port, "/dreddit" + port)
       if err == nil {
         DPrintf("%d: Successfully connected to miner at port " + port, ck.clerkId)
         ck.servers = append(ck.servers, client)
