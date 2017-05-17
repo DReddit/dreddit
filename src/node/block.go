@@ -46,6 +46,22 @@ func (block *Block) toString() string {
 	return repr
 }
 
+// Given a list of transactions
+// compute a coinbase tranasction which
+//  - consumes each of the tx fees
+//  - includes the mining reward
+func MakeCoinbaseTx(txs []Transaction) Transaction {
+	// TODO: make this customizable
+	// This is pubKey #1
+	pkHash, _ := base64.StdEncoding.DecodeString("ekZtvHY9XwiGbnzyVOvvMhCEDSE=")
+	value := uint32(len(txs) * TX_FEE + TX_COINBASE)
+	txOut := TxOut{value, pkHash}
+	txOuts := make([]TxOut, 1)
+	txOuts[0] = txOut
+
+	return Transaction{COINBASE, nil, txOuts, nil, nil}
+}
+
 // Given a new block with a provided
 //  MerkleRoot
 //  PrevBlock
@@ -79,7 +95,7 @@ func proofOfWork(block *Block) {
 // The block consists of 10 transfers of 100 dkarma each to
 // 10 hardcoded dreddit addresses
 func GenerateGenesisBlock() *Block {
-	txouts := make([]TxOut, 10)
+	txOuts := make([]TxOut, 10)
 	pubKeyHashB64 := make([]string, 10)
 	pubKeyHashB64[0] = "ekZtvHY9XwiGbnzyVOvvMhCEDSE="
 	pubKeyHashB64[1] = "2WTu40XZmDEeVXplZMMbRLcp0Aw="
@@ -92,12 +108,12 @@ func GenerateGenesisBlock() *Block {
 	pubKeyHashB64[8] = "qyfnaoRKUnFTdgVLp+20YC1KTVk="
 	pubKeyHashB64[9] = "IJMO7/8wIeyS1/gVDEiZvXoLt4E="
 
-	for i, _ := range txouts {
+	for i, _ := range txOuts {
 		pkHash, _ := base64.StdEncoding.DecodeString(pubKeyHashB64[i])
-		txouts[i] = TxOut{100, pkHash}
+		txOuts[i] = TxOut{100, pkHash}
 	}
 
-	tx := Transaction{COINBASE, nil, txouts, nil, nil}
+	tx := Transaction{COINBASE, nil, txOuts, nil, nil}
 	txs := []Transaction{tx}
 	genesisBlock := new(Block)
 	genesisBlock.PrevBlock = make([]byte, HASH_NUM_BYTES)
@@ -139,6 +155,9 @@ func GenerateBlock(blockchain []*Block, txs []Transaction) *Block {
 		newBlock.PrevBlock = make([]byte, len(lastBlockHash))
 		copy(newBlock.PrevBlock, lastBlockHash)
 	}
+
+	// Coinbase
+	txs = append(txs, MakeCoinbaseTx(txs))
 
 	// MerkleRoot
 	newBlock.MerkleRoot = BuildMerkleTreeStore(txs)

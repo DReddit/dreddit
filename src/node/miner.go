@@ -177,7 +177,7 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) {
 		}
 		node.mu.Unlock()
 
-		// TODO: figure out how long to sleep / maybe a way to do this w/o spinning
+		// TODO: figure out how long to sleep / maybe a way to do this w/o spinning;
 		// condition variables seem like the right way to accomplish this:
 		// http://stackoverflow.com/questions/19802037/long-polling-global-button-broadcast-to-everyone
 		time.Sleep(time.Millisecond * 10)
@@ -230,6 +230,8 @@ func (node *DRNode) Mine() {
 				node.PendingTxs[txNode.ClerkId].Status = SUCCESS
 				node.UpdateUtxoDb(txNode.Tx)
 			}
+			// update UTXO with coinbase tx
+			node.UpdateUtxoDb(newBlock.Transactions[len(newBlock.Transactions) - 1])
 			node.utxoMu.Unlock()
 			node.numPending -= len(txNodes)
 		}
@@ -290,8 +292,8 @@ func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
 		outputSum += txOut.Value
 	}
 
-	if inputSum < outputSum {
-		return false, errors.New("Input sum is less than output sum")
+	if inputSum + TX_FEE < outputSum {
+		return false, errors.New("Input sum (plus fee) is less than output sum")
 	}
 
 	return true, nil

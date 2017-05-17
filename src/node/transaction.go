@@ -12,6 +12,10 @@ const (
 	UPVOTE   = iota
 )
 
+const TX_FEE      = 1
+const TX_UPVOTE   = 10
+const TX_COINBASE = 100
+
 type Transaction struct {
 	Type    uint32    // the type of transaction
 	TxIns   []TxIn    // list of input transactions

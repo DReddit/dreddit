@@ -42,6 +42,7 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck.clerkId = int(nrand())
 	ck.current = 0
 	// Decode a hardcoded b64-encoded private key (TODO: allow specifying key on startup)
+	// This is privKey #7
 	pkBytes, err := base64.StdEncoding.DecodeString("p4BuPO9r2e4Wl/45lVCEzDaFnP2k3IfALlTxF4vwMHg=")
 	if err != nil {
 			fmt.Println(err)
@@ -99,7 +100,7 @@ func (ck *Clerk) Post(content string) bool {
 	args := node.AppendTxArgs{}
 
 	var inputSum uint32
-	var txFee uint32
+	txFee := uint32(node.TX_FEE)
 	priv := ck.privKey
 	pubkeyHash := node.PKHash(priv.PubKey().SerializeCompressed())
 	DPrintf("%d: PubKeyHash: %v", ck.clerkId, base64.StdEncoding.EncodeToString(pubkeyHash))
