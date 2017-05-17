@@ -61,6 +61,7 @@ func MakeClerk(port string, servers []string) *Clerk {
 	return ck
 }
 
+// Clerks gossip just to get an updated list of drnodes to talk to
 func (ck *Clerk) GossipProtocol() {
 	gossipTimeout := time.NewTimer(time.Duration(200) * time.Millisecond) // probably should randomize this
 
