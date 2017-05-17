@@ -95,6 +95,76 @@ func (ck *Clerk) QueryUtxo(pubKeyHash []byte) ([]node.UnspentTx, bool) {
 	}
 }
 
+func (ck *Clerk) Transfer(destination string, value uint32) bool {
+	current := ck.current
+	args := node.AppendTxArgs{}
+
+	var inputSum uint32
+	txFee := uint32(node.TX_FEE)
+	priv := ck.privKey
+	pubkeyHash := node.PKHash(priv.PubKey().SerializeCompressed())
+	DPrintf("%d: PubKeyHash: %v", ck.clerkId, base64.StdEncoding.EncodeToString(pubkeyHash))
+	unspentTxs, succ := ck.QueryUtxo(pubkeyHash)
+	if succ == false {
+		DPrintf("No valid output transactions to spend. Aborting Transaction")
+		return false
+	}
+
+	if value == 0 {
+		DPrintf("Can only transfer a positive value. Aborting Transaction")
+		return false
+	}
+
+	txIns := make([]node.TxIn, 0)
+	inputSum := uint32(0)
+
+	for _, utx := range unspentTxs {
+		inputSum += utx.Value
+		txIn := node.TxIn{utx.TxHash, utx.TxOutIndex, nil, priv.PubKey().SerializeCompressed()}
+		txIns = append(txIns, txIn)
+		if inputSum > value + txFee {
+			break
+		}
+	}
+	if inputSum < value + txFee {
+		DPrintf("Not enough dkarma in wallet to make transfer. Aborting Transaction.")
+		return false
+	}
+
+	// give self amount of input - (transaction fee + value)
+	ptsTx := node.TxOut{inputSum - txFee - value, pubkeyHash}
+	// give recipient value
+	recTx := node.TxOut{value, bytes(destination)}
+	txOuts := make([]node.TxOut, 2)
+	txOuts[0] = recTx
+	txOuts[1] = ptsTx
+
+	Tx := node.Transaction{node.TRANSFER, txIns, txOuts, nil, nil}
+	ck.SignTx(&Tx)
+
+	args.Tx = Tx
+	args.ClerkId = ck.clerkId
+	DPrintf("%d: trying to transfer %d to %s", ck.clerkId, value, destination)
+
+	for {
+		reply := node.AppendTxReply{}
+		ok := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
+		if !ok {
+			current = (current + 1) % len(ck.servers)
+		} else {
+			if reply.Success {
+				DPrintf("%d: Successful post", ck.clerkId)
+			} else {
+				DPrintf("%d: Transaction invalid", ck.clerkId)
+			}
+
+			return reply.Success
+		}
+	}
+
+	return false
+}
+
 func (ck *Clerk) Post(content string) bool {
 	current := ck.current
 	args := node.AppendTxArgs{}
@@ -109,7 +179,7 @@ func (ck *Clerk) Post(content string) bool {
 		DPrintf("No valid output transactions to spend. Aborting Transaction")
 		return false
 	}
-	//fmt.Println(unspentTxs)
+	// since the TX_FEE is set at 1 (lowest denomination of dkarma), any utxo will do
 	utx := unspentTxs[0]
 
 	txIns := make([]node.TxIn, 1)
@@ -123,7 +193,6 @@ func (ck *Clerk) Post(content string) bool {
 	txOuts := make([]node.TxOut, 1)
 	txOuts[0] = ptsTx
 
-	//txIns = make([]node.TxIn,0)
 	Tx := node.Transaction{node.POST, txIns, txOuts, nil, []byte(content)}
 	ck.SignTx(&Tx)
 
@@ -150,5 +219,122 @@ func (ck *Clerk) Post(content string) bool {
 	return false
 }
 
-// TODO make functions for transfer, comment, and upvote
-// func (ck *Clerk) Comment(content string, parent []byte)
+func (ck *Clerk) Comment(parent string, content string) bool {
+	current := ck.current
+	args := node.AppendTxArgs{}
+
+	var inputSum uint32
+	txFee := uint32(node.TX_FEE)
+	priv := ck.privKey
+	pubkeyHash := node.PKHash(priv.PubKey().SerializeCompressed())
+	DPrintf("%d: PubKeyHash: %v", ck.clerkId, base64.StdEncoding.EncodeToString(pubkeyHash))
+	unspentTxs, succ := ck.QueryUtxo(pubkeyHash)
+	if succ == false {
+		DPrintf("No valid output transactions to spend. Aborting Transaction")
+		return false
+	}
+	// since the TX_FEE is set at 1 (lowest denomination of dkarma), any utxo will do
+	utx := unspentTxs[0]
+
+	txIns := make([]node.TxIn, 1)
+	txIns[0].PrevTxHash = utx.TxHash
+	txIns[0].PrevTxOutIndex = utx.TxOutIndex
+	txIns[0].PubKey = priv.PubKey().SerializeCompressed()
+	inputSum += utx.Value
+
+	// give self amount of input - transaction fee
+	ptsTx := node.TxOut{inputSum-txFee, pubkeyHash}
+	txOuts := make([]node.TxOut, 1)
+	txOuts[0] = ptsTx
+
+	Tx := node.Transaction{node.COMMENT, txIns, txOuts, bytes(parent), []byte(content)}
+	ck.SignTx(&Tx)
+
+	args.Tx = Tx
+	args.ClerkId = ck.clerkId
+	DPrintf("%d: trying to comment \"%s\" on %s", ck.clerkId, content, parent)
+
+	for {
+		reply := node.AppendTxReply{}
+		ok := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
+		if !ok {
+			current = (current + 1) % len(ck.servers)
+		} else {
+			if reply.Success {
+				DPrintf("%d: Successful post", ck.clerkId)
+			} else {
+				DPrintf("%d: Transaction invalid", ck.clerkId)
+			}
+
+			return reply.Success
+		}
+	}
+
+	return false
+}
+
+func (ck *Clerk) Upvote(parent string, destination string) bool {
+	current := ck.current
+	args := node.AppendTxArgs{}
+
+	var inputSum uint32
+	txFee := uint32(node.TX_FEE)
+	priv := ck.privKey
+	pubkeyHash := node.PKHash(priv.PubKey().SerializeCompressed())
+	DPrintf("%d: PubKeyHash: %v", ck.clerkId, base64.StdEncoding.EncodeToString(pubkeyHash))
+	unspentTxs, succ := ck.QueryUtxo(pubkeyHash)
+	if succ == false {
+		DPrintf("No valid output transactions to spend. Aborting Transaction")
+		return false
+	}
+
+	txIns := make([]node.TxIn, 0)
+	inputSum := uint32(0)
+
+	for _, utx := range unspentTxs {
+		inputSum += utx.Value
+		txIn := node.TxIn{utx.TxHash, utx.TxOutIndex, nil, priv.PubKey().SerializeCompressed()}
+		txIns = append(txIns, txIn)
+		if inputSum > node.TX_UPVOTE + txFee {
+			break
+		}
+	}
+	if inputSum < node.TX_UPVOTE + txFee {
+		DPrintf("Not enough dkarma in wallet to make upvote. Aborting Transaction.")
+		return false
+	}
+
+	// give self amount of input - (transaction fee + upvote amount)
+	ptsTx := node.TxOut{inputSum - txFee - node.TX_UPVOTE, pubkeyHash}
+	// give recipient upvote
+	// TODO: change this method to automatically find the destination from the blockchain
+	upvTx := node.TxOut{node.TX_UPVOTE, bytes(destination)}
+	txOuts := make([]node.TxOut, 2)
+	txOuts[0] = upvTx
+	txOuts[1] = ptsTx
+
+	Tx := node.Transaction{node.UPVOTE, txIns, txOuts, bytes(parent), nil}
+	ck.SignTx(&Tx)
+
+	args.Tx = Tx
+	args.ClerkId = ck.clerkId
+	DPrintf("%d: trying to upvote %s", ck.clerkId, parent)
+
+	for {
+		reply := node.AppendTxReply{}
+		ok := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
+		if !ok {
+			current = (current + 1) % len(ck.servers)
+		} else {
+			if reply.Success {
+				DPrintf("%d: Successful post", ck.clerkId)
+			} else {
+				DPrintf("%d: Transaction invalid", ck.clerkId)
+			}
+
+			return reply.Success
+		}
+	}
+
+	return false
+}
