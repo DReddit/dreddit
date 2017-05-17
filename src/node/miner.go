@@ -28,7 +28,7 @@ type DRNode struct {
   me          int            // id of this node
   numPending  int            // number of pending transactions
   PendingTxs  map[int]*TxNode // map from ClerkId to last pending transaction
-  //SeenTxs     map[[]byte]int  // stores if we've seen a Tx before
+  SeenTxs     map[string]bool  // stores if we've seen a Tx before
   Blockchain  []*Block        // current view of the blockchain
   SideChains  []*SideChain
   OrphanChains []*SideChain
@@ -86,7 +86,7 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
   node := new(DRNode)
   node.me = me
   node.PendingTxs = make(map[int]*TxNode)
-  //node.SeenTxs = make(map[[]byte]int)
+  node.SeenTxs = make(map[string]bool)
   node.numPending = 0
   node.Blockchain = make([]*Block, 0)
   node.port = port
@@ -435,6 +435,15 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
     node.mu.Unlock()
     return nil
   }
+
+  s := string(args.Tx.Hash())
+  _, ok = node.SeenTxs[s]
+  if ok {
+    DPrintf("%d: already seen AppendTx request with hash %x", node.me, s)
+    node.mu.Unlock()
+    reply.Success = false
+    return nil
+  } else { node.SeenTxs[s] = true }
 
   outStr := ""
   for _, port := range node.ports {

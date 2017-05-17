@@ -132,3 +132,56 @@ func TestGossip(t *testing.T) {
 
   fmt.Printf("  ... Passed\n")
 }
+
+func TestChainResolution(t *testing.T) {
+  fmt.Printf("Test: Setup with ten miners, five users, one post each ...\n")
+  const nservers = 10
+  const nclients = 5
+  const unreliable = false
+  const tag = "basic_one_post"
+
+  drNodes := make([]*node.DRNode, nservers)
+  clients := make([]*clerk.Clerk, nclients)
+  empty := make([]string, 0)
+  serverPorts := make([]string, nservers)
+
+  drNodes[0] = node.StartDRNode(0, "14000", empty)
+  serverPorts[0] = "14000"
+
+  for i := 1; i < nservers; i++ {
+    knownPorts := make([]string, 1)
+    knownPorts[0] = strconv.Itoa(i + 13999)
+    drNodes[i] = node.StartDRNode(i, strconv.Itoa(i + 14000), knownPorts)
+    serverPorts[i] = strconv.Itoa(i + 14000)
+  }
+
+  defer cleanUp(drNodes)
+
+  time.Sleep(time.Duration(3000) * time.Millisecond)
+
+  for i := 0; i < nservers; i++ {
+    size := drNodes[i].GetPeerSize()
+    if size != nservers - 1 {
+       t.Fatal("Did not learn group of peers quickly enough, miner %d only knows %d peers", i, size)
+    }
+  }
+
+  for i := 0; i < nclients; i++ {
+    clients[i] = clerk.MakeClerk(strconv.Itoa(i + 3100), serverPorts)
+  }
+
+  for i := 0; i < 5; i++ {
+    go func(index int) {
+      ck := clients[index]
+      ok := ck.Post(strconv.Itoa(index) + " Post!!!1")
+      
+      if !ok {
+        t.Fatal("Attempted Post failed")
+      }
+    }(i)
+  }
+
+  time.Sleep(time.Duration(10000) * time.Millisecond)
+
+  fmt.Printf("  ... Passed\n")
+}
