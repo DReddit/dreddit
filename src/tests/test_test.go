@@ -11,7 +11,7 @@ import (
 
 func cleanUp(drNodes []*node.DRNode) {
 	for i := 0; i < len(drNodes); i++ {
-		drNodes[i].Kill()
+		drNodes[i].Kill(nil, nil)
 	}
 }
 
@@ -111,7 +111,9 @@ func TestGossip(t *testing.T) {
 	time.Sleep(time.Duration(3000) * time.Millisecond)
 
 	for i := 0; i < nservers; i++ {
-		size := drNodes[i].GetPeerSize()
+		dummyReply := node.DummyReply{}
+		drNodes[i].GetPeerSize(nil, &dummyReply)
+		size := dummyReply.Retval
 		if size != nservers - 1 {
 			 t.Fatal("Did not learn group of peers quickly enough, miner %d only knows %d peers", i, size)
 		}
@@ -160,7 +162,9 @@ func TestChainResolution(t *testing.T) {
 	time.Sleep(time.Duration(3000) * time.Millisecond)
 
 	for i := 0; i < nservers; i++ {
-		size := drNodes[i].GetPeerSize()
+		dummyReply := node.DummyReply{}
+		drNodes[i].GetPeerSize(nil, &dummyReply)
+		size := dummyReply.Retval
 		if size != nservers - 1 {
 			 t.Fatal("Did not learn group of peers quickly enough, miner %d only knows %d peers", i, size)
 		}
