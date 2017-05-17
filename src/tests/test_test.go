@@ -134,8 +134,8 @@ func TestGossip(t *testing.T) {
 }
 
 func TestChainResolution(t *testing.T) {
-	fmt.Printf("Test: Setup with ten miners, five users, one post each ...\n")
-	const nservers = 10
+	fmt.Printf("Test: Setup with five miners, five users, one post each ...\n")
+	const nservers = 5
 	const nclients = 5
 	const unreliable = false
 	const tag = "basic_one_post"
