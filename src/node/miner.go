@@ -11,7 +11,7 @@ import (
   "bytes"
 )
 
-const Debug = 1
+const Debug = 0
 const BLOCK_SIZE_THRESHOLD = 1
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
@@ -105,7 +105,7 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
       args := BlockArgs{}
       reply := BlockReply{}
       err := client.Call("DRNode.GetBlockChain", &args, &reply) // we don't put this in a goroutine because we want to wait
-      
+
       if err == nil {
         if len(reply.Blockchain) > len(node.Blockchain) {
           node.Blockchain = reply.Blockchain
@@ -128,12 +128,12 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
 
   go node.GossipProtocol()
   go node.Mine()
-  
+
   return node
 }
 
 // used purely for testing
-func (node *DRNode) GetPeerSize() int{ 
+func (node *DRNode) GetPeerSize() int{
   return len(node.ports)
 }
 
@@ -185,7 +185,7 @@ type SideChain struct {
 // given a sidechain, finds the sidechain block which has hash prevHash
 // returns nil if no block found. Returns a special sidechain of index -2
 // if we find the block in the sidechain
-func (sc *SideChain) FindParent(prevHash, curHash []byte) *SideChain { 
+func (sc *SideChain) FindParent(prevHash, curHash []byte) *SideChain {
   if bytes.Compare(sc.Block.BlockHash, curHash) == 0 {
     return &SideChain{ParentIndex:-2}
   }
@@ -210,7 +210,7 @@ func (sc *SideChain) Recompute(depth, parentIndex int) {
   sc.ParentIndex = parentIndex
 
   if len(sc.Children) == 0 { return }
-  
+
   for _, subSC := range sc.Children {
     subSC.Recompute(depth + 1, parentIndex)
   }
@@ -226,14 +226,14 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
   node.bcmu.Lock()
   defer node.bcmu.Unlock()
 
-  if len(node.Blockchain) == 0 || 
+  if len(node.Blockchain) == 0 ||
     bytes.Compare(prevHash, node.Blockchain[len(node.Blockchain) - 1].BlockHash) == 0 { // adds to main chain
     node.Blockchain = append(node.Blockchain, newBlock)
     return nil
   }
 
   var curSideChain *SideChain
-  status := 0 // 0 for orphan, 1 for new sidechain, 2 for expanding old sidechain/orphan chain  
+  status := 0 // 0 for orphan, 1 for new sidechain, 2 for expanding old sidechain/orphan chain
 
   // now we scan through our current blocks to see where our block falls
 
@@ -308,7 +308,7 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
   if newLength > len(node.Blockchain) { // breaks ties in favor of current mainchain so >
     breakPoint := curSideChain.ParentIndex
     breakMainChain := node.Blockchain[curSideChain.ParentIndex + 1:len(node.Blockchain)]
-    
+
     // we construct sidechain nodes for the nodes originally on the mainchain
     newSideNodes := make([]*SideChain, len(breakMainChain))
     for i := range newSideNodes {
@@ -324,7 +324,7 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
     for i := range node.SideChains {
       j := i - deleted
       sc := node.SideChains[j]
-      if sc.ParentIndex > breakPoint { 
+      if sc.ParentIndex > breakPoint {
         newParent := newSideNodes[sc.ParentIndex - breakPoint - 1]
         sc.Parent = newParent
         sc.Recompute(newParent.Depth, breakPoint)
@@ -334,9 +334,9 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
         node.SideChains = node.SideChains[0:len(node.SideChains) - 1]
       }
     }
-    
+
     newMainChain := make([]*Block, curSideChain.Depth + 1)
-  
+
     // heal the mainchain and construct new sidechains in the process
     for curSideChain.Parent != nil {
       depth := curSideChain.Depth
@@ -354,7 +354,7 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 
     node.Blockchain = append(node.Blockchain, newMainChain...)
   }
-  
+
   return nil
 }
 
@@ -369,7 +369,7 @@ func (node *DRNode) GetBlockChain(args *BlockArgs, reply *BlockReply) error {
 
 func (node *DRNode) GossipProtocol() {
   gossipTimeout := time.NewTimer(time.Duration(100 + rand.Intn(100)) * time.Millisecond) // probably should randomize this
-  
+
   for {
     select {
     case <- node.quit:
@@ -378,10 +378,10 @@ func (node *DRNode) GossipProtocol() {
       node.peermu.Lock()
       node.Merge(append(reply.Peers, reply.Port))
       node.peermu.Unlock()
-      
+
     case <- gossipTimeout.C:
       DPrintf("Node %d gossiping", node.me)
-      node.peermu.Lock()    
+      node.peermu.Lock()
       args := GossipArgs{Port:node.port, Peers:node.ports}
       for _, client := range node.servers {
         go func(c *rpc.Client) {
@@ -394,7 +394,7 @@ func (node *DRNode) GossipProtocol() {
       }
       node.peermu.Unlock()
       gossipTimeout.Reset(time.Duration(100 + rand.Intn(100)) * time.Millisecond)
-      
+
     }
   }
 }
@@ -419,7 +419,7 @@ func (node *DRNode) Merge(newPeers []string) {
         DPrintf("%d: Successfully connected to miner at port " + port, node.me)
         node.servers = append(node.servers, client)
         node.ports = append(node.ports, port)
-      }      
+      }
     }
   }
 }
@@ -528,23 +528,23 @@ func (node *DRNode) Mine() {
 
       node.bcmu.Lock()
 
-      if len(node.Blockchain) == 0 || 
-        bytes.Compare(newBlock.PrevBlock, node.Blockchain[len(node.Blockchain) - 1].BlockHash) == 0 { // if the block we just mined still adds to mainchain 
+      if len(node.Blockchain) == 0 ||
+        bytes.Compare(newBlock.PrevBlock, node.Blockchain[len(node.Blockchain) - 1].BlockHash) == 0 { // if the block we just mined still adds to mainchain
         args := SendBlockArgs{newBlock}
-        
+
         for _, client := range node.servers {
           go func(c *rpc.Client) {
             reply := SendBlockReply{}
             c.Call("DRNode.SendBlock", &args, &reply)
           }(client)
         }
-        
+
         // Then, advertise our new block to other miners (later)
         // and append our block to the blockchain
         node.Blockchain = append(node.Blockchain, newBlock)
-        
+
         DPrintf("%d appended a new block to the blockchain:\n%s", node.me, newBlock.toString())
-        
+
         // Finally, mark all the successful transactions as valid
         for _, txNode := range txNodes {
           node.PendingTxs[txNode.ClerkId].Status = SUCCESS

@@ -4,7 +4,7 @@ package node
 // https://github.com/btcsuite/btcd/blob/d06c0bb181529331be8f8d9350288c420d9e60e4/blockchain/merkle.go
 
 import (
-  "math"
+	"math"
 )
 
 // nextPowerOfTwo returns the next highest power of two from a given number if
