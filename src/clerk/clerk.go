@@ -16,13 +16,13 @@ import (
 const Debug = 1
 
 type Clerk struct {
-	peermu  sync.Mutex          // lock on list of dreddit servers
-	port    string              // address of clerk
-	ports   []string            // addresses of dreddit servers
-	servers []*rpc.Client       // the list of dreddit nodes the clerk knows of
-	clerkId int                 // the unique id of this clerk
-	current int                 // the current server that this clerk will talk to
-	privKey *btcec.PrivateKey   // private key used by clerk
+	peermu  sync.Mutex        // lock on list of dreddit servers
+	port    string            // address of clerk
+	ports   []string          // addresses of dreddit servers
+	servers []*rpc.Client     // the list of dreddit nodes the clerk knows of
+	clerkId int               // the unique id of this clerk
+	current int               // the current server that this clerk will talk to
+	privKey *btcec.PrivateKey // private key used by clerk
 
 	gossip chan node.GossipReply
 }

@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
-	"errors"
 )
 
 const DIFFICULTY = 4
@@ -40,7 +40,7 @@ func pack(block *Block) []byte {
 	copy(data[4+HASH_NUM_BYTES:4+2*HASH_NUM_BYTES], block.MerkleRoot)             // Merkle Root
 	copy(data[4+2*HASH_NUM_BYTES:4+2*HASH_NUM_BYTES+4], packInt(block.Timestamp)) // Timestamp
 	copy(data[8+2*HASH_NUM_BYTES:8+2*HASH_NUM_BYTES+4], packInt(block.Bits))      // Bits
-	copy(data[12+2*HASH_NUM_BYTES:12+2*HASH_NUM_BYTES+4], packInt(block.Nonce))                     // Nonce
+	copy(data[12+2*HASH_NUM_BYTES:12+2*HASH_NUM_BYTES+4], packInt(block.Nonce))   // Nonce
 	return data
 }
 
@@ -243,15 +243,15 @@ func ValidateBlock(block *Block) (bool, error) {
 	}
 
 	// Coinbase transaction must be last
-	txCoinbase := block.Transactions[len(block.Transactions) - 1]
+	txCoinbase := block.Transactions[len(block.Transactions)-1]
 	succ, err := VerifyCoinbaseTx(txCoinbase)
 	if !succ {
 		return false, err
 	}
 
 	// None of the other transactions can be coinbase:
-	for i, tx := range(block.Transactions) {
-		if i != len(block.Transactions) - 1 {
+	for i, tx := range block.Transactions {
+		if i != len(block.Transactions)-1 {
 			if tx.Type == COINBASE {
 				return false, errors.New("coinbase transaction found in non-last spot")
 			}

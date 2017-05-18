@@ -46,7 +46,7 @@ type DRNode struct {
 	Log          []Block      // log of blocks for replay purposes
 
 	// UTXO
-	Utxo       *UtxoDb         // UTXO
+	Utxo *UtxoDb // UTXO
 
 	// networking
 	port     string        // port of this server
@@ -813,7 +813,7 @@ func (node *DRNode) validateTransaction(tx *Transaction) (bool, error) {
 //   - the coinbase transaction's value is equal to the sum of the
 //     transaction fees plus the mining reward
 func (node *DRNode) validateBlockTxs(newBlock *Block) (bool, error) {
-	for _, tx := range(newBlock.Transactions) {
+	for _, tx := range newBlock.Transactions {
 		if tx.Type != COINBASE {
 			succ, err := tx.ValidateStructure()
 			if !succ {
@@ -824,7 +824,7 @@ func (node *DRNode) validateBlockTxs(newBlock *Block) (bool, error) {
 				return false, err
 			}
 		} else {
-			if tx.TxOuts[0].Value != uint32((len(newBlock.Transactions) - 1) * TX_FEE + TX_COINBASE) {
+			if tx.TxOuts[0].Value != uint32((len(newBlock.Transactions)-1)*TX_FEE+TX_COINBASE) {
 				return false, errors.New("Coinbase value is wrong")
 			}
 		}
