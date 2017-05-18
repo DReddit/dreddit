@@ -8,7 +8,7 @@
     * If, when forming a row in the tree (other than the root of the tree), it would have an odd number of elements, the final double-hash is duplicated to ensure that the row has an even number of hashes.
 * dreddit uses ECDSA to sign transactions
     * Signatures use DER encoding to pack the r and s components into a single byte stream (this is also what OpenSSL produces by default).
-    * 
+
 ## Transaction Verification
 In addition to the [rules](https://en.bitcoin.it/wiki/Protocol_rules#.22tx.22_messages) that the original bitcoin protocol verifies, dreddit requires additional checks for each of the additional transactions supported:
 

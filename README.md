@@ -1,2 +1,2 @@
 # dreddit
-An implementation of the DReddit protocol written in golang
+An implementation of the dreddit protocol written in golang
