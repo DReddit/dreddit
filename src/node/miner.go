@@ -314,6 +314,7 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 		node.Blockchain = append(node.Blockchain, newBlock)
 
 		// Finally, mark all the successful transactions as valid
+		node.mu.Lock()
 		node.utxoMu.Lock()
 		for _, tx := range newBlock.Transactions {
 			if tx.Type != COINBASE {
@@ -323,6 +324,7 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 		}
 		node.numPending -= (len(newBlock.Transactions) - 1)
 		node.utxoMu.Unlock()
+		node.mu.Unlock()
 		return nil
 	}
 
