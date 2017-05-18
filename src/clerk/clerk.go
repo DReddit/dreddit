@@ -79,7 +79,6 @@ func (ck *Clerk) GossipProtocol() {
 	for {
 		select {
 		case <-gossipTimeout.C:
-			DPrintf("Clerk %d gossiping", ck.clerkId)
 			ck.peermu.Lock()
 			args := node.GossipArgs{Port: "-1", Peers: ck.ports}
 			for _, client := range ck.servers {

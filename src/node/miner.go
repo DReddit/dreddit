@@ -294,6 +294,8 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 	newBlock := &args.SentBlock
 	prevHash := newBlock.PrevBlock
 	curHash := newBlock.BlockHash
+	node.mu.Lock()
+	defer node.mu.Unlock()
 	node.bcmu.Lock()
 	defer node.bcmu.Unlock()
 
@@ -314,7 +316,6 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 		node.Blockchain = append(node.Blockchain, newBlock)
 
 		// Finally, mark all the successful transactions as valid
-		node.mu.Lock()
 		node.utxoMu.Lock()
 		for _, tx := range newBlock.Transactions {
 			if tx.Type != COINBASE {
@@ -324,7 +325,6 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 		}
 		node.numPending -= (len(newBlock.Transactions) - 1)
 		node.utxoMu.Unlock()
-		node.mu.Unlock()
 		return nil
 	}
 
@@ -477,7 +477,6 @@ func (node *DRNode) gossipProtocol() {
 			node.peermu.Unlock()
 
 		case <-gossipTimeout.C:
-			DPrintf("Node %d gossiping", node.me)
 			node.peermu.Lock()
 			args := GossipArgs{Port: node.port, Peers: node.ports}
 			for _, client := range node.servers {
