@@ -282,8 +282,8 @@ func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
 				return false, errors.New("PubKeyHashes don't match")
 			}
 
-            // TODO: validate that txIn is spendable.
-            //      Need to traverse last 10 blocks of blockchain and validate that transaction does not exist in those blocks
+      // TODO: validate that txIn is spendable.
+      // Need to traverse last 10 blocks of blockchain and validate that transaction does not exist in those blocks
 
 			inputSum += utxoEntry.outputs[txIn.PrevTxOutIndex].Value
 
@@ -309,16 +309,11 @@ func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
         parentTx := node.FindTxInBlockChain(tx.Parent)
         if parentTx == nil || !(parentTx.Type == POST || parentTx.Type == COMMENT) {
             return false, errors.New("Invalid parent Tx Hash provided")
-        } 
+        }
         if tx.Type == UPVOTE && !(bytes.Equal(tx.TxOuts[0].PubKeyHash, parentTx.TxOuts[0].PubKeyHash)) {
             return false, errors.New("Parent PubKeyHash not matching")
         }
     }
-
-
-    // Comment TX
-    // Check 
-    // if tx.Parent
 
 	return true, nil
 }
