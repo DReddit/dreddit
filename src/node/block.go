@@ -176,8 +176,6 @@ func GenerateGenesisBlock() *Block {
 func GenerateBlock(prevBlockHash []byte, txs []Transaction, pubHash string) *Block {
 	newBlock := new(Block)
 
-	DPrintf("this is pubhash: %s", pubHash)
-
 	// PrevBlock
 	newBlock.PrevBlock = prevBlockHash
 

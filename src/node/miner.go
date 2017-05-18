@@ -36,9 +36,9 @@ type DRNode struct {
 	utxoMu sync.Mutex // lock on DRNode's UTXO
 
 	// transactions
-	numPending int             // number of pending transactions
-	PendingTxs map[int]*TxNode // map from ClerkId to last pending transaction
-	SeenTxs    map[string]bool // stores if we've seen a Tx before
+	numPending int                // number of pending transactions
+	PendingTxs map[string]*TxNode // map from pending tx hash to tx metadata
+	SeenTxs    map[string]bool    // stores if we've seen a Tx before
 
 	// blockchain
 	Blockchain   []*Block     // current view of the blockchain
@@ -75,6 +75,7 @@ type TxNode struct {
 	Tx      Transaction // the transaction itself
 	ClerkId int         // the id of the clerk who sent the tx
 	Status  int         // current status of the transaction
+	Hash    string      // hash of the transaction
 }
 
 // AppendTx
@@ -114,7 +115,7 @@ func StartDRNode(me int, port string, pubHash string, servers []string) *DRNode 
 	node.pubHash = pubHash
 
 	// transactions
-	node.PendingTxs = make(map[int]*TxNode)
+	node.PendingTxs = make(map[string]*TxNode)
 	node.SeenTxs = make(map[string]bool)
 	node.numPending = 0
 
@@ -315,8 +316,12 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 		// Finally, mark all the successful transactions as valid
 		node.utxoMu.Lock()
 		for _, tx := range newBlock.Transactions {
+			if tx.Type != COINBASE {
+				node.PendingTxs[string((&tx).Hash())].Status = SUCCESS
+			}
 			node.updateUtxoDb(tx)
 		}
+		node.numPending -= (len(newBlock.Transactions) - 1)
 		node.utxoMu.Unlock()
 		return nil
 	}
@@ -573,17 +578,9 @@ func (node *DRNode) merge(newPeers []string) {
 func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
 	DPrintf("%d received AppendTx request from client %d", node.me, args.ClerkId)
 	node.mu.Lock()
-	// Check that this clerk has no pending transaction already
-	txNode, ok := node.PendingTxs[args.ClerkId]
-	if ok && txNode.Status != HANDLED {
-		DPrintf("%d: client %d already has a pending request", node.me, args.ClerkId)
-		reply.Success = false
-		node.mu.Unlock()
-		return nil
-	}
 
 	s := string(args.Tx.Hash())
-	_, ok = node.SeenTxs[s]
+	_, ok := node.SeenTxs[s]
 	if ok {
 		DPrintf("%d: already seen AppendTx request with hash %x", node.me, s)
 		node.mu.Unlock()
@@ -602,7 +599,7 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
 	// Else, add this to pending txs
 	// TODO: maybe validate the transction first?
 	// Important to send different error if the tx is already in the blockchain
-	node.PendingTxs[args.ClerkId] = &TxNode{args.Tx, args.ClerkId, PENDING}
+	node.PendingTxs[s] = &TxNode{args.Tx, args.ClerkId, PENDING, s}
 	node.numPending++
 	node.mu.Unlock()
 	DPrintf("%d successfully started AppendTx request for client %d", node.me, args.ClerkId)
@@ -619,16 +616,16 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
 
 	for {
 		node.mu.Lock()
-		if node.PendingTxs[args.ClerkId].Status == SUCCESS {
+		if node.PendingTxs[s].Status == SUCCESS {
 			reply.Success = true
-			node.PendingTxs[args.ClerkId].Status = HANDLED
+			node.PendingTxs[s].Status = HANDLED
 			node.mu.Unlock()
 			DPrintf("%d successfully completed AppendTx request for client %d", node.me, args.ClerkId)
 			return nil
 		}
-		if node.PendingTxs[args.ClerkId].Status == INVALID {
+		if node.PendingTxs[s].Status == INVALID {
 			reply.Success = false
-			node.PendingTxs[args.ClerkId].Status = HANDLED
+			node.PendingTxs[s].Status = HANDLED
 			node.mu.Unlock()
 			DPrintf("%d's AppendTx request from client %d failed", node.me, args.ClerkId)
 			return nil
@@ -660,7 +657,7 @@ func (node *DRNode) mine() {
 			txNodes := make([]*TxNode, 0)
 
 			// First, validate all pending transactions
-			for _, txNode := range node.PendingTxs {
+			for s, txNode := range node.PendingTxs {
 				if txNode.Status == PENDING {
 					// TODO actually validate the transaction here
 					// remember to validate against the entire blockchain PLUS
@@ -671,7 +668,7 @@ func (node *DRNode) mine() {
 					// If the transaction isn't valid, mark it as such here
 					if !succ {
 						DPrintf("Error while validating transaction: %v", err)
-						node.PendingTxs[txNode.ClerkId].Status = INVALID
+						node.PendingTxs[s].Status = INVALID
 					} else {
 						txs = append(txs, txNode.Tx)
 						txNodes = append(txNodes, txNode)
@@ -714,7 +711,7 @@ func (node *DRNode) mine() {
 				// Finally, mark all the successful transactions as valid
 				node.utxoMu.Lock()
 				for _, txNode := range txNodes {
-					node.PendingTxs[txNode.ClerkId].Status = SUCCESS
+					node.PendingTxs[txNode.Hash].Status = SUCCESS
 					node.updateUtxoDb(txNode.Tx)
 				}
 				// update UTXO with coinbase tx

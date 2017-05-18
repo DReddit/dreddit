@@ -87,8 +87,8 @@ func TestMultiplePosts(t *testing.T) {
 }
 
 func TestGossip(t *testing.T) {
-	fmt.Printf("Test: Setup with nine miners, one user, one post ...\n")
-	const nservers = 9
+	fmt.Printf("Test: Setup with five miners, one user, one post ...\n")
+	const nservers = 5
 	const nclients = 1
 	const tag = "basic_one_post"
 
