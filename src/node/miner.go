@@ -2,15 +2,15 @@ package node
 
 import (
 	"bytes"
-	"math/rand"
-	"net"
-	"net/http"
-	"net/rpc"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/btcec"
 	"log"
+	"math/rand"
+	"net"
+	"net/http"
+	"net/rpc"
 	"sync"
 	"time"
 )
@@ -27,36 +27,36 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 
 type DRNode struct {
 	// Represents state for a dreddit mining node
-	me           int             // id of this node
+	me int // id of this node
 
 	// locks (must always be acquired in this order!)
-	mu           sync.Mutex      // lock on DRNode's state
-	bcmu         sync.Mutex      // lock on the blockchain
-	utxoMu       sync.Mutex      // lock on DRNode's UTXO
+	mu     sync.Mutex // lock on DRNode's state
+	bcmu   sync.Mutex // lock on the blockchain
+	utxoMu sync.Mutex // lock on DRNode's UTXO
 
 	// transactions
-	numPending   int             // number of pending transactions
-	PendingTxs   map[int]*TxNode // map from ClerkId to last pending transaction
-	SeenTxs      map[string]bool // stores if we've seen a Tx before
+	numPending int             // number of pending transactions
+	PendingTxs map[int]*TxNode // map from ClerkId to last pending transaction
+	SeenTxs    map[string]bool // stores if we've seen a Tx before
 
 	// blockchain
-	Blockchain   []*Block        // current view of the blockchain
-	SideChains   []*SideChain    // non-main chains rooted somewhere on blockchain
-	OrphanChains []*SideChain    // non-main chains whoes earliest block is parent-less
-	Log          []Block         // log of blocks for replay purposes
+	Blockchain   []*Block     // current view of the blockchain
+	SideChains   []*SideChain // non-main chains rooted somewhere on blockchain
+	OrphanChains []*SideChain // non-main chains whoes earliest block is parent-less
+	Log          []Block      // log of blocks for replay purposes
 
 	// networking
-	port         string          // port of this server
-	ports        []string        // ports of this server's peers
-	servers      []*rpc.Client   // list of this server's peers
-	peermu       sync.Mutex      // lock on the peer list
-	listener     net.Listener    // rpc listener
+	port     string        // port of this server
+	ports    []string      // ports of this server's peers
+	servers  []*rpc.Client // list of this server's peers
+	peermu   sync.Mutex    // lock on the peer list
+	listener net.Listener  // rpc listener
 
 	// channels
-	chNewTx    chan bool         // channel to inform of new tx
-	chNewBlock chan bool         // channel to inform of new block
-	gossip     chan GossipReply  // the gossip we get back
-	quit       chan int          // channel to send kill message
+	chNewTx    chan bool        // channel to inform of new tx
+	chNewBlock chan bool        // channel to inform of new block
+	gossip     chan GossipReply // the gossip we get back
+	quit       chan int         // channel to send kill message
 }
 
 const (

@@ -25,7 +25,7 @@ type Clerk struct {
 	current int                 // the current server that this clerk will talk to
 	privKey *btcec.PrivateKey   // private key used by clerk
 
-	gossip  chan node.GossipReply
+	gossip chan node.GossipReply
 }
 
 // Generates a random 64-bit identifying id for the clerk
@@ -53,9 +53,9 @@ func MakeClerk(port string, servers []string) *Clerk {
 	ck.servers = make([]*rpc.Client, 0)
 
 	for _, serverPort := range servers {
-		client, err := rpc.DialHTTPPath("tcp", "localhost:" + serverPort, "/dreddit" + serverPort)
+		client, err := rpc.DialHTTPPath("tcp", "localhost:"+serverPort, "/dreddit"+serverPort)
 		if err == nil {
-			DPrintf("%d: Successfully connected to miner at port " + serverPort, ck.clerkId)
+			DPrintf("%d: Successfully connected to miner at port "+serverPort, ck.clerkId)
 			ck.servers = append(ck.servers, client)
 			ck.ports = append(ck.ports, serverPort)
 		}
@@ -81,10 +81,10 @@ func (ck *Clerk) GossipProtocol() {
 
 	for {
 		select {
-		case <- gossipTimeout.C:
+		case <-gossipTimeout.C:
 			DPrintf("Clerk %d gossiping", ck.clerkId)
 			ck.peermu.Lock()
-			args := node.GossipArgs{Port:"-1", Peers:ck.ports}
+			args := node.GossipArgs{Port: "-1", Peers: ck.ports}
 			for _, client := range ck.servers {
 				go func(c *rpc.Client) {
 					reply := node.GossipReply{}
@@ -97,7 +97,7 @@ func (ck *Clerk) GossipProtocol() {
 			ck.peermu.Unlock()
 			gossipTimeout.Reset(time.Duration(200) * time.Millisecond)
 
-		case reply := <- ck.gossip: // an optimization would be only run merge when a digest of the peer list has changed
+		case reply := <-ck.gossip: // an optimization would be only run merge when a digest of the peer list has changed
 			ck.peermu.Lock()
 			ck.Merge(append(reply.Peers, reply.Port))
 			ck.peermu.Unlock()
@@ -117,9 +117,9 @@ func (ck *Clerk) Merge(newPeers []string) {
 			}
 		}
 		if !found {
-			client, err := rpc.DialHTTPPath("tcp", "localhost:" + port, "/dreddit" + port)
+			client, err := rpc.DialHTTPPath("tcp", "localhost:"+port, "/dreddit"+port)
 			if err == nil {
-				DPrintf("%d: Successfully connected to miner at port " + port, ck.clerkId)
+				DPrintf("%d: Successfully connected to miner at port "+port, ck.clerkId)
 				ck.servers = append(ck.servers, client)
 				ck.ports = append(ck.ports, port)
 			}

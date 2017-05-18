@@ -1,11 +1,11 @@
 package tests
 
 import (
-	"testing"
-	"fmt"
-	"strconv"
 	"clerk"
+	"fmt"
 	"node"
+	"strconv"
+	"testing"
 	"time"
 )
 
@@ -28,12 +28,12 @@ func TestOnePost(t *testing.T) {
 	serverPorts := make([]string, nservers)
 
 	for i := 0; i < nservers; i++ {
-		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i + 10000), empty)
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+10000), empty)
 		serverPorts[i] = strconv.Itoa(i + 10000)
 	}
 
 	for i := 0; i < nclients; i++ {
-		clients[i] = clerk.MakeClerk(strconv.Itoa(i + 10100), serverPorts)
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+10100), serverPorts)
 	}
 
 	defer cleanUp(drNodes)
@@ -48,7 +48,6 @@ func TestOnePost(t *testing.T) {
 	fmt.Printf("  ... Passed\n")
 }
 
-
 func TestMultiplePosts(t *testing.T) {
 	fmt.Printf("Test: Basic setup with one miner, one user, ten posts ...\n")
 	const nservers = 1
@@ -62,12 +61,12 @@ func TestMultiplePosts(t *testing.T) {
 	serverPorts := make([]string, nservers)
 
 	for i := 0; i < nservers; i++ {
-		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i + 2000), empty)
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+2000), empty)
 		serverPorts[i] = strconv.Itoa(i + 2000)
 	}
 
 	for i := 0; i < nclients; i++ {
-		clients[i] = clerk.MakeClerk(strconv.Itoa(i + 2100), serverPorts)
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+2100), serverPorts)
 	}
 
 	defer cleanUp(drNodes)
@@ -102,7 +101,7 @@ func TestGossip(t *testing.T) {
 	for i := 1; i < nservers; i++ {
 		knownPorts := make([]string, 1)
 		knownPorts[0] = strconv.Itoa(i + 12999)
-		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i + 13000), knownPorts)
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+13000), knownPorts)
 		serverPorts[i] = strconv.Itoa(i + 13000)
 	}
 
@@ -114,13 +113,13 @@ func TestGossip(t *testing.T) {
 		dummyReply := node.DummyReply{}
 		drNodes[i].GetPeerSize(nil, &dummyReply)
 		size := dummyReply.RetVal
-		if size != nservers - 1 {
-			 t.Fatal("Did not learn group of peers quickly enough, miner %d only knows %d peers", i, size)
+		if size != nservers-1 {
+			t.Fatal("Did not learn group of peers quickly enough, miner %d only knows %d peers", i, size)
 		}
 	}
 
 	for i := 0; i < nclients; i++ {
-		clients[i] = clerk.MakeClerk(strconv.Itoa(i + 3100), serverPorts)
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+3100), serverPorts)
 	}
 
 	ck := clients[0]
@@ -153,7 +152,7 @@ func TestChainResolution(t *testing.T) {
 	for i := 1; i < nservers; i++ {
 		knownPorts := make([]string, 1)
 		knownPorts[0] = strconv.Itoa(i + 13999)
-		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i + 14000), knownPorts)
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+14000), knownPorts)
 		serverPorts[i] = strconv.Itoa(i + 14000)
 	}
 
@@ -165,13 +164,13 @@ func TestChainResolution(t *testing.T) {
 		dummyReply := node.DummyReply{}
 		drNodes[i].GetPeerSize(nil, &dummyReply)
 		size := dummyReply.RetVal
-		if size != nservers - 1 {
-			 t.Fatal("Did not learn group of peers quickly enough, miner %d only knows %d peers", i, size)
+		if size != nservers-1 {
+			t.Fatal("Did not learn group of peers quickly enough, miner %d only knows %d peers", i, size)
 		}
 	}
 
 	for i := 0; i < nclients; i++ {
-		clients[i] = clerk.MakeClerk(strconv.Itoa(i + 3100), serverPorts)
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+3100), serverPorts)
 	}
 
 	for i := 0; i < 5; i++ {
