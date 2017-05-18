@@ -147,7 +147,7 @@ func StartDRNode(me int, port string, pubHash string, servers []string) *DRNode 
 				args := BlockArgs{}
 				reply := BlockReply{}
 				// we don't put this in a goroutine because we want to wait
-				err := client.Call("DRNode.GetBlockChain", &args, &reply)
+				err := client.Call("DRNode.GetBlockLog", &args, &reply)
 
 				if err == nil {
 					// When a new node connects to the dreddit network, it gets the blockchain
@@ -178,7 +178,7 @@ func StartDRNode(me int, port string, pubHash string, servers []string) *DRNode 
 	if len(node.Blockchain) == 0 {
 		node.bootstrap()
 		for _, block := range node.Blockchain {
-			DPrintf("Genesis Block:\n%v", block.toString())
+			DPrintf("Genesis Block:\n%v", block.ToString())
 		}
 	}
 	go node.mine()
@@ -462,10 +462,22 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 	return nil
 }
 
-func (node *DRNode) GetBlockChain(args *BlockArgs, reply *BlockReply) error {
+func (node *DRNode) GetBlockLog(args *BlockArgs, reply *BlockReply) error {
 	node.bcmu.Lock()
 	reply.Log = node.Log
 	node.bcmu.Unlock()
+	return nil
+}
+
+func (node *DRNode) GetBlockchain(args *BlockArgs, reply *BlockReply) error {
+	node.mu.Lock()
+	node.bcmu.Lock()
+	reply.Log = make([]Block, len(node.Blockchain))
+	for i, block := range node.Blockchain {
+		reply.Log[i] = *block
+	}
+	node.bcmu.Unlock()
+	node.mu.Unlock()
 	return nil
 }
 
@@ -505,6 +517,7 @@ func (node *DRNode) updateUtxoDb(tx Transaction) {
 		txHash := string(txIn.PrevTxHash)
 		uidx := txIn.PrevTxOutIndex
 		utxoEntry, ok := node.Utxo.Entries[txHash]
+		DPrintf("this is the state of utxo: %v", node.Utxo.Entries)
 		if ok {
 			utxoEntry.outputs[uidx].Spent = true
 			// if remaining outputs of this transaction are all spent, remove tx from UTXO
@@ -712,7 +725,7 @@ func (node *DRNode) mine() {
 				// ...and append our block to the blockchain
 				node.Blockchain = append(node.Blockchain, newBlock)
 				node.Log = append(node.Log, *newBlock)
-				DPrintf("%d appended a new block to the blockchain:\n%s", node.me, newBlock.toString())
+				DPrintf("%d appended a new block to the blockchain:\n%s", node.me, newBlock.ToString())
 
 				// Finally, mark all the successful transactions as valid
 				node.utxoMu.Lock()

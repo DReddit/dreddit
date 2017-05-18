@@ -44,7 +44,7 @@ func pack(block *Block) []byte {
 }
 
 // Returns a string representation of the block
-func (block *Block) toString() string {
+func (block *Block) ToString() string {
 	var repr string
 	repr = "  ------------------------------------------------------------------------------\n"
 	repr += fmt.Sprintf(" / PrevBlock:  %x\n", block.PrevBlock)
