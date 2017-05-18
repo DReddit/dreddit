@@ -9,6 +9,8 @@ import (
   "net/rpc"
   "os"
   "bufio"
+  "strings"
+  "bytes"
 )
 
 type Client struct {
@@ -61,16 +63,30 @@ func (cl *Client) renderFrontPage(blockchain []node.Block) {
   fmt.Printf("              / __/ _ \\/ -_) / _/ __/ _ \\/ _ \\/ __/ _ \\/ _ `/ _ `/ -_)\n")
   fmt.Printf("              \\__/_//_/\\__/ /_//_/  \\___/_//_/\\__/ .__/\\_,_/\\_, /\\__/ \n")
   fmt.Printf("                                                /_/        /___/      \n\n\n")
+  txs := make([]node.Transaction, 0)
   for _, block := range blockchain {
-    for _, tx := range block.Transactions {
-      if tx.Type == node.POST {
-        fmt.Printf("                    /--------------------------------------------\n")
-        fmt.Printf("                    |   %s", tx.Content)
-        fmt.Printf("                    \\--------------------------------------------\n")
-        fmt.Printf("                                                \\  %x\n", tx.Hash()[0:6])
-        fmt.Printf("                                                 \\---------------\n\n")
-        cl.hashMap[fmt.Sprintf("%x\n", tx.Hash()[0:6])] = string(tx.Hash())
-      }
+    txs = append(txs, block.Transactions...)
+  }
+  for _, tx := range txs {
+    if tx.Type == node.POST {
+      cl.renderContent(tx, txs, 0)
+      fmt.Printf("\n")
+    }
+  }
+}
+
+func (cl *Client) renderContent(tx node.Transaction, txs []node.Transaction, indent int) {
+  fmt.Printf(strings.Repeat("      ", indent) + "                    /--------------------------------------------\n")
+  fmt.Printf(strings.Repeat("      ", indent) + "                    |   %s", tx.Content)
+  fmt.Printf(strings.Repeat("      ", indent) + "                    \\--------------------------------------------\n")
+  fmt.Printf(strings.Repeat("      ", indent) + "                                                \\  %x\n", tx.Hash()[0:6])
+  fmt.Printf(strings.Repeat("      ", indent) + "                                                 \\---------------\n")
+  hash := tx.Hash()
+  cl.hashMap[fmt.Sprintf("%x\n", hash[0:6])] = string(hash)
+
+  for _, txd := range txs {
+    if txd.Type == node.COMMENT && bytes.Equal(txd.Parent, hash) {
+      cl.renderContent(txd, txs, indent + 1)
     }
   }
 }
