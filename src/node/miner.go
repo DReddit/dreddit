@@ -1,17 +1,17 @@
 package node
 
 import (
+	"bytes"
 	"log"
-	"sync"
-	"time"
-	"net/rpc"
+	"math/rand"
 	"net"
 	"net/http"
-	"math/rand"
-	"bytes"
+	"net/rpc"
+	"sync"
+	"time"
 )
 
-const Debug = 0
+const Debug = 1
 const BLOCK_SIZE_THRESHOLD = 1
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
@@ -23,50 +23,51 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 
 type DRNode struct {
 	// Represents state for a dreddit mining node
-	mu           sync.Mutex       // lock on DRNode's state
-	bcmu         sync.Mutex       // lock on the blockchain
-	me           int              // id of this node
-	numPending   int              // number of pending transactions
-	PendingTxs   map[int]*TxNode  // map from ClerkId to last pending transaction
-	SeenTxs      map[string]bool  // stores if we've seen a Tx before
-	Blockchain   []*Block         // current view of the blockchain
-	SideChains   []*SideChain     // non-main chains rooted somewhere on blockchain
-	OrphanChains []*SideChain     // non-main chains whoes earliest block is parent-less
-	port         string           // port of this server
-	ports        []string         // ports of this server's peers
-	servers      []*rpc.Client    // list of this server's peers
-	peermu       sync.Mutex       // lock on the peer list
-	listener     net.Listener     // rpc listener
+	mu           sync.Mutex      // lock on DRNode's state
+	bcmu         sync.Mutex      // lock on the blockchain
+	me           int             // id of this node
+	numPending   int             // number of pending transactions
+	PendingTxs   map[int]*TxNode // map from ClerkId to last pending transaction
+	SeenTxs      map[string]bool // stores if we've seen a Tx before
+	Blockchain   []*Block        // current view of the blockchain
+	SideChains   []*SideChain    // non-main chains rooted somewhere on blockchain
+	OrphanChains []*SideChain    // non-main chains whoes earliest block is parent-less
+	Log          []Block         // log of blocks for replay purposes
+	port         string          // port of this server
+	ports        []string        // ports of this server's peers
+	servers      []*rpc.Client   // list of this server's peers
+	peermu       sync.Mutex      // lock on the peer list
+	listener     net.Listener    // rpc listener
 
 	// channels
-	chNewTx      chan bool        // channel to inform of new tx
-	chNewBlock   chan bool        // channel to inform of new block
-	gossip       chan GossipReply // the gossip we get back
-	quit         chan int         // channel to send kill message
+	chNewTx    chan bool        // channel to inform of new tx
+	chNewBlock chan bool        // channel to inform of new block
+	gossip     chan GossipReply // the gossip we get back
+	quit       chan int         // channel to send kill message
 }
 
 const (
-	PENDING = iota             // transaction is pending append
-	INVALID = iota             // transaction is invalid and will not be processed
-	SUCCESS = iota             // transaction was successfully appended to the chain
-	HANDLED = iota             // responded to clerk
+	PENDING = iota // transaction is pending append
+	INVALID = iota // transaction is invalid and will not be processed
+	SUCCESS = iota // transaction was successfully appended to the chain
+	HANDLED = iota // responded to clerk
 )
 
 type TxNode struct {
 	// The transaction bundled with some metadata for mining purposes
-	Tx          Transaction    // the transaction itself
-	ClerkId     int            // the id of the clerk who sent the tx
-	Status      int            // current status of the transaction
+	Tx      Transaction // the transaction itself
+	ClerkId int         // the id of the clerk who sent the tx
+	Status  int         // current status of the transaction
 }
 
 // AppendTx
 type AppendTxArgs struct {
-	Tx          Transaction    // the transaction we want to append
-	ClerkId     int            // the id of the clerk who sent the request
+	Tx      Transaction // the transaction we want to append
+	ClerkId int         // the id of the clerk who sent the request
 }
 
 type AppendTxReply struct {
-	Success     bool           // whether or not the request was successful
+	Success bool // whether or not the request was successful
 }
 
 // Dummy set of arguments for non-rpc calls from tests
@@ -97,6 +98,7 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
 	node.SeenTxs = make(map[string]bool)
 	node.numPending = 0
 	node.Blockchain = make([]*Block, 0)
+	node.Log = make([]Block, 0)
 	node.port = port
 	node.ports = make([]string, 0)
 	node.servers = make([]*rpc.Client, 0)
@@ -104,21 +106,20 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
 	node.quit = make(chan int)
 
 	for _, serverPort := range servers {
-		client, err := rpc.DialHTTPPath("tcp", "localhost:" + serverPort, "/dreddit" + serverPort)
+		client, err := rpc.DialHTTPPath("tcp", "localhost:"+serverPort, "/dreddit"+serverPort)
 		if err == nil {
-			DPrintf("%d: Successfully connected to miner at port " + serverPort, me)
+			DPrintf("%d: Successfully connected to miner at port "+serverPort, me)
 			node.servers = append(node.servers, client)
 			node.ports = append(node.ports, serverPort)
 
-			args := BlockArgs{}
-			reply := BlockReply{}
-			err := client.Call("DRNode.GetBlockChain", &args, &reply) // we don't put this in a goroutine because we want to wait
+			if len(node.Blockchain) == 0 {
+				args := BlockArgs{}
+				reply := BlockReply{}
+				err := client.Call("DRNode.GetBlockChain", &args, &reply) // we don't put this in a goroutine because we want to wait
 
-			if err == nil {
-				if len(reply.Blockchain) > len(node.Blockchain) {
-					node.Blockchain = reply.Blockchain
-					node.SideChains = reply.SideChains
-					node.OrphanChains = reply.OrphanChains
+				if err == nil {
+					node.Log = reply.Log
+					node.replayLog()
 				}
 			}
 		}
@@ -129,8 +130,8 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
 
 	server := rpc.NewServer()
 	server.RegisterName("DRNode", node)
-	server.HandleHTTP("/dreddit" + port, "/debug/dreddit" + port)
-	l, _ := net.Listen("tcp", "localhost:" + port)
+	server.HandleHTTP("/dreddit"+port, "/debug/dreddit"+port)
+	l, _ := net.Listen("tcp", "localhost:"+port)
 	node.listener = l
 	go http.Serve(l, nil)
 
@@ -169,26 +170,24 @@ func (node *DRNode) Gossip(args *GossipArgs, reply *GossipReply) error {
 	return nil
 }
 
-type BlockArgs struct {}
+type BlockArgs struct{}
 
 type BlockReply struct {
-	Blockchain []*Block
-	SideChains []*SideChain
-	OrphanChains []*SideChain
+	Log []Block
 }
 
 type SendBlockArgs struct {
-	SentBlock *Block
+	SentBlock Block
 }
 
-type SendBlockReply struct {}
+type SendBlockReply struct{}
 
 type SideChain struct {
-	Parent       *SideChain // nil if attached to mainchain
-	ParentIndex  int        // -1 if orphan block
-	Block        *Block
-	Depth        int
-	Children     []*SideChain
+	Parent      *SideChain // nil if attached to mainchain
+	ParentIndex int        // -1 if orphan block
+	Block       *Block
+	Depth       int
+	Children    []*SideChain
 }
 
 // given a sidechain, finds the sidechain block which has hash prevHash
@@ -196,18 +195,22 @@ type SideChain struct {
 // if we find the block in the sidechain
 func (sc *SideChain) FindParent(prevHash, curHash []byte) *SideChain {
 	if bytes.Compare(sc.Block.BlockHash, curHash) == 0 {
-		return &SideChain{ParentIndex:-2}
+		return &SideChain{ParentIndex: -2}
 	}
 
 	if bytes.Compare(sc.Block.BlockHash, prevHash) == 0 {
 		return sc
 	}
 
-	if len(sc.Children) == 0 { return nil }
+	if len(sc.Children) == 0 {
+		return nil
+	}
 
 	for _, subSC := range sc.Children {
 		result := subSC.FindParent(prevHash, curHash)
-		if result != nil { return result }
+		if result != nil {
+			return result
+		}
 	}
 
 	return nil
@@ -218,10 +221,28 @@ func (sc *SideChain) Recompute(depth, parentIndex int) {
 	sc.Depth = depth + 1
 	sc.ParentIndex = parentIndex
 
-	if len(sc.Children) == 0 { return }
+	if len(sc.Children) == 0 {
+		return
+	}
 
 	for _, subSC := range sc.Children {
-		subSC.Recompute(depth + 1, parentIndex)
+		subSC.Recompute(depth+1, parentIndex)
+	}
+}
+
+func (node *DRNode) replayLog() {
+	node.bcmu.Lock()
+	// first we reset the current blockchain.
+	node.Blockchain = make([]*Block, 0)
+	node.SideChains = make([]*SideChain, 0)
+	node.OrphanChains = make([]*SideChain, 0)
+	node.bcmu.Unlock()
+
+	// now we replay the whole log
+	for _, newBlock := range node.Log {
+		fakeArgs := SendBlockArgs{newBlock}
+		fakeReply := SendBlockReply{}
+		node.SendBlock(&fakeArgs, &fakeReply)
 	}
 }
 
@@ -229,14 +250,16 @@ func (sc *SideChain) Recompute(depth, parentIndex int) {
 func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error {
 	DPrintf("%d received a block with hash %x", node.me, args.SentBlock.BlockHash)
 
-	newBlock := args.SentBlock
+	newBlock := &args.SentBlock
 	prevHash := newBlock.PrevBlock
 	curHash := newBlock.BlockHash
 	node.bcmu.Lock()
 	defer node.bcmu.Unlock()
 
+	node.Log = append(node.Log, *newBlock)
+
 	if len(node.Blockchain) == 0 ||
-		bytes.Compare(prevHash, node.Blockchain[len(node.Blockchain) - 1].BlockHash) == 0 { // adds to main chain
+		bytes.Compare(prevHash, node.Blockchain[len(node.Blockchain)-1].BlockHash) == 0 { // adds to main chain
 		node.Blockchain = append(node.Blockchain, newBlock)
 		return nil
 	}
@@ -271,7 +294,7 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 		}
 	}
 
-	 for _, oc := range node.OrphanChains {
+	for _, oc := range node.OrphanChains {
 		result := oc.FindParent(prevHash, curHash)
 		if result != nil {
 			if result.ParentIndex == -2 {
@@ -301,8 +324,8 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 			oc.Recompute(curSideChain.Depth, curSideChain.ParentIndex)
 
 			// magic trick to do deletion in O(1) time
-			node.OrphanChains[j] = node.OrphanChains[len(node.OrphanChains) - 1]
-			node.OrphanChains = node.OrphanChains[0:len(node.OrphanChains) - 1]
+			node.OrphanChains[j] = node.OrphanChains[len(node.OrphanChains)-1]
+			node.OrphanChains = node.OrphanChains[0 : len(node.OrphanChains)-1]
 		}
 	}
 
@@ -316,14 +339,14 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 	newLength := curSideChain.Depth + curSideChain.ParentIndex + 2
 	if newLength > len(node.Blockchain) { // breaks ties in favor of current mainchain so >
 		breakPoint := curSideChain.ParentIndex
-		breakMainChain := node.Blockchain[curSideChain.ParentIndex + 1:len(node.Blockchain)]
+		breakMainChain := node.Blockchain[curSideChain.ParentIndex+1 : len(node.Blockchain)]
 
 		// we construct sidechain nodes for the nodes originally on the mainchain
 		newSideNodes := make([]*SideChain, len(breakMainChain))
 		for i := range newSideNodes {
 			newSCNode := SideChain{nil, breakPoint, breakMainChain[i], i, make([]*SideChain, 0)}
 			if i != 0 {
-				newSCNode.Parent = newSideNodes[i - 1]
+				newSCNode.Parent = newSideNodes[i-1]
 				newSideNodes[i-1].Children = append(newSideNodes[i-1].Children, &newSCNode)
 			}
 			newSideNodes[i] = &newSCNode
@@ -334,17 +357,17 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 			j := i - deleted
 			sc := node.SideChains[j]
 			if sc.ParentIndex > breakPoint {
-				newParent := newSideNodes[sc.ParentIndex - breakPoint - 1]
+				newParent := newSideNodes[sc.ParentIndex-breakPoint-1]
 				sc.Parent = newParent
 				sc.Recompute(newParent.Depth, breakPoint)
 
 				// magic trick to do deletion in O(1) time
-				node.SideChains[j] = node.SideChains[len(node.SideChains) - 1]
-				node.SideChains = node.SideChains[0:len(node.SideChains) - 1]
+				node.SideChains[j] = node.SideChains[len(node.SideChains)-1]
+				node.SideChains = node.SideChains[0 : len(node.SideChains)-1]
 			}
 		}
 
-		newMainChain := make([]*Block, curSideChain.Depth + 1)
+		newMainChain := make([]*Block, curSideChain.Depth+1)
 
 		// heal the mainchain and construct new sidechains in the process
 		for curSideChain.Parent != nil {
@@ -353,9 +376,11 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 			parent := curSideChain.Parent
 
 			for _, sc := range parent.Children {
-				if bytes.Compare(curSideChain.Block.BlockHash, sc.Block.BlockHash) == 0 { continue }
+				if bytes.Compare(curSideChain.Block.BlockHash, sc.Block.BlockHash) == 0 {
+					continue
+				}
 				sc.Parent = nil
-				sc.Recompute(0, breakPoint + depth + 1) // because depth = 0 corresponds to index breakpoint + 1
+				sc.Recompute(0, breakPoint+depth+1) // because depth = 0 corresponds to index breakpoint + 1
 				node.SideChains = append(node.SideChains, sc)
 			}
 			curSideChain = curSideChain.Parent
@@ -369,29 +394,27 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 
 func (node *DRNode) GetBlockChain(args *BlockArgs, reply *BlockReply) error {
 	node.bcmu.Lock()
-	reply.Blockchain = node.Blockchain
-	reply.SideChains = node.SideChains
-	reply.OrphanChains = node.OrphanChains
+	reply.Log = node.Log
 	node.bcmu.Unlock()
 	return nil
 }
 
 func (node *DRNode) gossipProtocol() {
-	gossipTimeout := time.NewTimer(time.Duration(100 + rand.Intn(100)) * time.Millisecond) // probably should randomize this
+	gossipTimeout := time.NewTimer(time.Duration(100+rand.Intn(100)) * time.Millisecond) // probably should randomize this
 
 	for {
 		select {
-		case <- node.quit:
+		case <-node.quit:
 			return
-		case reply := <- node.gossip: // an optimization would be only run merge when a digest of the peer list has changed
+		case reply := <-node.gossip: // an optimization would be only run merge when a digest of the peer list has changed
 			node.peermu.Lock()
 			node.merge(append(reply.Peers, reply.Port))
 			node.peermu.Unlock()
 
-		case <- gossipTimeout.C:
+		case <-gossipTimeout.C:
 			DPrintf("Node %d gossiping", node.me)
 			node.peermu.Lock()
-			args := GossipArgs{Port:node.port, Peers:node.ports}
+			args := GossipArgs{Port: node.port, Peers: node.ports}
 			for _, client := range node.servers {
 				go func(c *rpc.Client) {
 					reply := GossipReply{}
@@ -402,7 +425,7 @@ func (node *DRNode) gossipProtocol() {
 				}(client)
 			}
 			node.peermu.Unlock()
-			gossipTimeout.Reset(time.Duration(100 + rand.Intn(100)) * time.Millisecond)
+			gossipTimeout.Reset(time.Duration(100+rand.Intn(100)) * time.Millisecond)
 
 		}
 	}
@@ -424,9 +447,9 @@ func (node *DRNode) merge(newPeers []string) {
 			}
 		}
 		if !found {
-			client, err := rpc.DialHTTPPath("tcp", "localhost:" + port, "/dreddit" + port)
+			client, err := rpc.DialHTTPPath("tcp", "localhost:"+port, "/dreddit"+port)
 			if err == nil {
-				DPrintf("%d: Successfully connected to miner at port " + port, node.me)
+				DPrintf("%d: Successfully connected to miner at port "+port, node.me)
 				node.servers = append(node.servers, client)
 				node.ports = append(node.ports, port)
 			}
@@ -453,13 +476,15 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
 		node.mu.Unlock()
 		reply.Success = false
 		return nil
-	} else { node.SeenTxs[s] = true }
+	} else {
+		node.SeenTxs[s] = true
+	}
 
 	outStr := ""
 	for _, port := range node.ports {
 		outStr = outStr + " " + port
 	}
-	DPrintf("%d has ports " + outStr, node.me)
+	DPrintf("%d has ports "+outStr, node.me)
 
 	// Else, add this to pending txs
 	// TODO: maybe validate the transction first?
@@ -471,10 +496,10 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
 
 	node.peermu.Lock()
 	for _, client := range node.servers {
-				go func(c *rpc.Client) {
-					fakereply := AppendTxReply{}
-					c.Call("DRNode.AppendTx", args, &fakereply)
-				}(client)
+		go func(c *rpc.Client) {
+			fakereply := AppendTxReply{}
+			c.Call("DRNode.AppendTx", args, &fakereply)
+		}(client)
 	}
 	node.peermu.Unlock()
 
@@ -508,7 +533,7 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
 func (node *DRNode) mine() {
 	for {
 		select {
-		case <- node.quit:
+		case <-node.quit:
 			return
 		default:
 		}
@@ -539,8 +564,8 @@ func (node *DRNode) mine() {
 			node.bcmu.Lock()
 
 			if len(node.Blockchain) == 0 ||
-				bytes.Compare(newBlock.PrevBlock, node.Blockchain[len(node.Blockchain) - 1].BlockHash) == 0 { // if the block we just mined still adds to mainchain
-				args := SendBlockArgs{newBlock}
+				bytes.Compare(newBlock.PrevBlock, node.Blockchain[len(node.Blockchain)-1].BlockHash) == 0 { // if the block we just mined still adds to mainchain
+				args := SendBlockArgs{*newBlock}
 
 				// Then, advertise our new block to other miners...
 				for _, client := range node.servers {
@@ -550,9 +575,9 @@ func (node *DRNode) mine() {
 					}(client)
 				}
 
-
 				// ...and append our block to the blockchain
 				node.Blockchain = append(node.Blockchain, newBlock)
+				node.Log = append(node.Log, *newBlock)
 				DPrintf("%d appended a new block to the blockchain:\n%s", node.me, newBlock.toString())
 
 				// Finally, mark all the successful transactions as valid
