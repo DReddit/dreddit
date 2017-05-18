@@ -1,16 +1,15 @@
 package clerk
 
 import (
-	"labrpc"
 	"crypto/rand"
-	"math/big"
-	"github.com/btcsuite/btcd/btcec"
-	"node"
-	"log"
-	"fmt"
 	"encoding/base64"
+	"fmt"
+	"github.com/btcsuite/btcd/btcec"
+	"labrpc"
+	"log"
+	"math/big"
+	"node"
 )
-
 
 const Debug = 1
 
@@ -45,8 +44,8 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	// This is privKey #7
 	pkBytes, err := base64.StdEncoding.DecodeString("p4BuPO9r2e4Wl/45lVCEzDaFnP2k3IfALlTxF4vwMHg=")
 	if err != nil {
-			fmt.Println(err)
-			return nil
+		fmt.Println(err)
+		return nil
 	}
 
 	ck.privKey, _ = btcec.PrivKeyFromBytes(btcec.S256(), pkBytes)
@@ -121,11 +120,11 @@ func (ck *Clerk) Transfer(destination string, value uint32) bool {
 		inputSum += utx.Value
 		txIn := node.TxIn{utx.TxHash, utx.TxOutIndex, nil, priv.PubKey().SerializeCompressed()}
 		txIns = append(txIns, txIn)
-		if inputSum > value + txFee {
+		if inputSum > value+txFee {
 			break
 		}
 	}
-	if inputSum < value + txFee {
+	if inputSum < value+txFee {
 		DPrintf("Not enough dkarma in wallet to make transfer. Aborting Transaction.")
 		return false
 	}
@@ -188,7 +187,7 @@ func (ck *Clerk) Post(content string) bool {
 	inputSum += utx.Value
 
 	// give self amount of input - transaction fee
-	ptsTx := node.TxOut{inputSum-txFee, pubkeyHash}
+	ptsTx := node.TxOut{inputSum - txFee, pubkeyHash}
 	txOuts := make([]node.TxOut, 1)
 	txOuts[0] = ptsTx
 
@@ -242,7 +241,7 @@ func (ck *Clerk) Comment(parent string, content string) bool {
 	inputSum += utx.Value
 
 	// give self amount of input - transaction fee
-	ptsTx := node.TxOut{inputSum-txFee, pubkeyHash}
+	ptsTx := node.TxOut{inputSum - txFee, pubkeyHash}
 	txOuts := make([]node.TxOut, 1)
 	txOuts[0] = ptsTx
 
@@ -293,11 +292,11 @@ func (ck *Clerk) Upvote(parent string, destination string) bool {
 		inputSum += utx.Value
 		txIn := node.TxIn{utx.TxHash, utx.TxOutIndex, nil, priv.PubKey().SerializeCompressed()}
 		txIns = append(txIns, txIn)
-		if inputSum > node.TX_UPVOTE + txFee {
+		if inputSum > node.TX_UPVOTE+txFee {
 			break
 		}
 	}
-	if inputSum < node.TX_UPVOTE + txFee {
+	if inputSum < node.TX_UPVOTE+txFee {
 		DPrintf("Not enough dkarma in wallet to make upvote. Aborting Transaction.")
 		return false
 	}

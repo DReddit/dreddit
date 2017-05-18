@@ -2,10 +2,10 @@ package node
 
 import (
 	"bytes"
-	"errors"
 	"encoding/base64"
-	"github.com/btcsuite/btcd/btcec"
+	"errors"
 	"fmt"
+	"github.com/btcsuite/btcd/btcec"
 	"log"
 	"sync"
 	"time"
@@ -23,42 +23,42 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 
 type DRNode struct {
 	// Represents state for a DReddit mining node
-	mu          sync.Mutex      // lock on DRNode's state
-	utxoMu      sync.Mutex      // lock on DRNode's UTXO
-	me          int             // id of this node
-	numPending  int             // number of pending transactions
-	PendingTxs  map[int]*TxNode // map from ClerkId to last pending transaction
-	Blockchain  []*Block        // current view of the blockchain
-	Utxo        *UtxoDb         // UTXO
+	mu         sync.Mutex      // lock on DRNode's state
+	utxoMu     sync.Mutex      // lock on DRNode's UTXO
+	me         int             // id of this node
+	numPending int             // number of pending transactions
+	PendingTxs map[int]*TxNode // map from ClerkId to last pending transaction
+	Blockchain []*Block        // current view of the blockchain
+	Utxo       *UtxoDb         // UTXO
 
 	// channels
-	chNewTx     chan bool      // channel to inform of new tx
-	chQuit      chan bool      // channel to send Kill message
-	chNewBlock  chan bool      // channel to inform of new block
+	chNewTx    chan bool // channel to inform of new tx
+	chQuit     chan bool // channel to send Kill message
+	chNewBlock chan bool // channel to inform of new block
 }
 
 const (
-	PENDING = iota             // transaction is pending append
-	INVALID = iota             // transaction is invalid and will not be processed
-	SUCCESS = iota             // transaction was successfully appended to the chain
-	HANDLED = iota             // responded to clerk
+	PENDING = iota // transaction is pending append
+	INVALID = iota // transaction is invalid and will not be processed
+	SUCCESS = iota // transaction was successfully appended to the chain
+	HANDLED = iota // responded to clerk
 )
 
 type TxNode struct {
 	// The transaction bundled with some metadata for mining purposes
-	Tx          Transaction    // the transaction itself
-	ClerkId     int            // the id of the clerk who sent the tx
-	Status      int            // current status of the transaction
+	Tx      Transaction // the transaction itself
+	ClerkId int         // the id of the clerk who sent the tx
+	Status  int         // current status of the transaction
 }
 
 // AppendTx
 type AppendTxArgs struct {
-	Tx          Transaction    // the transaction we want to append
-	ClerkId     int            // the id of the clerk who sent the request
+	Tx      Transaction // the transaction we want to append
+	ClerkId int         // the id of the clerk who sent the request
 }
 
 type AppendTxReply struct {
-	Success     bool           // whether or not the request was successful
+	Success bool // whether or not the request was successful
 }
 
 // Kills this node
@@ -76,7 +76,7 @@ func StartDRNode(me int) *DRNode {
 	node.Blockchain = make([]*Block, 0)
 
 	node.Bootstrap()
-	for _, block := range node.Blockchain  {
+	for _, block := range node.Blockchain {
 		DPrintf("Genesis Block:\n%v", block.toString())
 	}
 	go node.Mine()
@@ -86,7 +86,7 @@ func StartDRNode(me int) *DRNode {
 
 // Updates the node's UTXO with the new tranasction tx
 func (node *DRNode) UpdateUtxoDb(tx Transaction) {
-	for _ , txIn := range tx.TxIns {
+	for _, txIn := range tx.TxIns {
 		txHash := string(txIn.PrevTxHash)
 		uidx := txIn.PrevTxOutIndex
 		utxoEntry, ok := node.Utxo.Entries[txHash]
@@ -117,7 +117,7 @@ func (node *DRNode) UpdateUtxoDb(tx Transaction) {
 			node.Utxo.Entries[txHash] = new(UtxoEntry)
 			node.Utxo.Entries[txHash].outputs = make(map[uint32]*UtxoOutput)
 		}
-		node.Utxo.Entries[txHash].outputs[uidx] = &UtxoOutput{false,txOut.PubKeyHash, txOut.Value}
+		node.Utxo.Entries[txHash].outputs[uidx] = &UtxoOutput{false, txOut.PubKeyHash, txOut.Value}
 		DPrintf("Successfully Updated UTXO: %v %v", base64.StdEncoding.EncodeToString(txOut.PubKeyHash), txOut.Value)
 	}
 
@@ -231,7 +231,7 @@ func (node *DRNode) Mine() {
 				node.UpdateUtxoDb(txNode.Tx)
 			}
 			// update UTXO with coinbase tx
-			node.UpdateUtxoDb(newBlock.Transactions[len(newBlock.Transactions) - 1])
+			node.UpdateUtxoDb(newBlock.Transactions[len(newBlock.Transactions)-1])
 			node.utxoMu.Unlock()
 			node.numPending -= len(txNodes)
 		}
@@ -246,13 +246,13 @@ func (node *DRNode) Mine() {
 func (node *DRNode) VerifySignature(txIn *TxIn, txHashNoSig []byte) bool {
 	signature, err := btcec.ParseSignature(txIn.Sig, btcec.S256())
 	if err != nil {
-			fmt.Println(err)
-			return false
+		fmt.Println(err)
+		return false
 	}
 	pubKey, err := btcec.ParsePubKey(txIn.PubKey, btcec.S256())
 	if err != nil {
-			fmt.Println(err)
-			return false
+		fmt.Println(err)
+		return false
 	}
 	return signature.Verify(txHashNoSig, pubKey)
 }
@@ -282,8 +282,8 @@ func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
 				return false, errors.New("PubKeyHashes don't match")
 			}
 
-      // TODO: validate that txIn is spendable.
-      // Need to traverse last 10 blocks of blockchain and validate that transaction does not exist in those blocks
+			// TODO: validate that txIn is spendable.
+			// Need to traverse last 10 blocks of blockchain and validate that transaction does not exist in those blocks
 
 			inputSum += utxoEntry.outputs[txIn.PrevTxOutIndex].Value
 
@@ -295,36 +295,36 @@ func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
 		outputSum += txOut.Value
 	}
 
-	if inputSum + TX_FEE < outputSum {
+	if inputSum+TX_FEE < outputSum {
 		return false, errors.New("Input sum (plus fee) is less than output sum")
 	}
 
-    // validate that transaction has right structure (number of outputs)
-    if ok, err := tx.ValidateStructure(); !ok {
-        return false, err
-    }
+	// validate that transaction has right structure (number of outputs)
+	if ok, err := tx.ValidateStructure(); !ok {
+		return false, err
+	}
 
-    // At this point Tx are structurally valid
-    if tx.Type == COMMENT || tx.Type == UPVOTE {
-        parentTx := node.FindTxInBlockChain(tx.Parent)
-        if parentTx == nil || !(parentTx.Type == POST || parentTx.Type == COMMENT) {
-            return false, errors.New("Invalid parent Tx Hash provided")
-        }
-        if tx.Type == UPVOTE && !(bytes.Equal(tx.TxOuts[0].PubKeyHash, parentTx.TxOuts[0].PubKeyHash)) {
-            return false, errors.New("Parent PubKeyHash not matching")
-        }
-    }
+	// At this point Tx are structurally valid
+	if tx.Type == COMMENT || tx.Type == UPVOTE {
+		parentTx := node.FindTxInBlockChain(tx.Parent)
+		if parentTx == nil || !(parentTx.Type == POST || parentTx.Type == COMMENT) {
+			return false, errors.New("Invalid parent Tx Hash provided")
+		}
+		if tx.Type == UPVOTE && !(bytes.Equal(tx.TxOuts[0].PubKeyHash, parentTx.TxOuts[0].PubKeyHash)) {
+			return false, errors.New("Parent PubKeyHash not matching")
+		}
+	}
 
 	return true, nil
 }
 
 func (node *DRNode) FindTxInBlockChain(txHash []byte) *Transaction {
-    for _, block := range node.Blockchain {
-        for _, tx := range block.Transactions {
-            if bytes.Equal(tx.Hash(), txHash) {
-                return &tx
-            }
-        }
-    }
-    return nil
+	for _, block := range node.Blockchain {
+		for _, tx := range block.Transactions {
+			if bytes.Equal(tx.Hash(), txHash) {
+				return &tx
+			}
+		}
+	}
+	return nil
 }

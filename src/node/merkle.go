@@ -97,5 +97,5 @@ func BuildMerkleTreeStore(transactions []Transaction) []byte {
 		offset++
 	}
 
-	return merkles[len(merkles) - 1]
+	return merkles[len(merkles)-1]
 }

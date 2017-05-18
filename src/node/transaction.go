@@ -1,9 +1,9 @@
 package node
 
 import (
+	"bytes"
 	"encoding/base64"
-    "errors"
-    "bytes"
+	"errors"
 )
 
 const (
@@ -14,54 +14,53 @@ const (
 	UPVOTE   = iota
 )
 
-const TX_FEE      = 1
-const TX_UPVOTE   = 10
+const TX_FEE = 1
+const TX_UPVOTE = 10
 const TX_COINBASE = 100
 
 type Transaction struct {
-	Type    uint32    // the type of transaction
-	TxIns   []TxIn    // list of input transactions
-	TxOuts  []TxOut   // list of output transactions
-	Parent  []byte    // hash of referenced transaction (for comment and upvote)
-	Content []byte    // content of post / comment
+	Type    uint32  // the type of transaction
+	TxIns   []TxIn  // list of input transactions
+	TxOuts  []TxOut // list of output transactions
+	Parent  []byte  // hash of referenced transaction (for comment and upvote)
+	Content []byte  // content of post / comment
 }
 
 type TxIn struct {
-	PrevTxHash      []byte     // reference to corresponding previous Transaction
-	PrevTxOutIndex  uint32     // index of corresponding TxOut in prev transaction
-	Sig             []byte     // ECDSA signature of entire Transaction (except other sigs and pks)
-	PubKey          []byte     // Public key of spender
+	PrevTxHash     []byte // reference to corresponding previous Transaction
+	PrevTxOutIndex uint32 // index of corresponding TxOut in prev transaction
+	Sig            []byte // ECDSA signature of entire Transaction (except other sigs and pks)
+	PubKey         []byte // Public key of spender
 }
 
 type TxOut struct {
-	Value      uint32     // amount of DKarma transferred
-	PubKeyHash []byte     // hash of public key of the eventual spender
+	Value      uint32 // amount of DKarma transferred
+	PubKeyHash []byte // hash of public key of the eventual spender
 }
 
 func (txIn *TxIn) pack() []byte {
-	data := make([]byte, len(txIn.PrevTxHash) + 4 + len(txIn.Sig) + len(txIn.PubKey))
-	copy(data[0:HASH_NUM_BYTES], txIn.PrevTxHash) // PrevTxHash
-	copy(data[HASH_NUM_BYTES:4 + HASH_NUM_BYTES], packInt(txIn.PrevTxOutIndex)) // PrevTxOut Index
-	copy(data[4 + HASH_NUM_BYTES : 4 + HASH_NUM_BYTES + len(txIn.Sig)], txIn.Sig) // Sig
-	copy(data[4 + HASH_NUM_BYTES + len(txIn.Sig): 4 + HASH_NUM_BYTES + len(txIn.Sig) + len(txIn.PubKey)],
+	data := make([]byte, len(txIn.PrevTxHash)+4+len(txIn.Sig)+len(txIn.PubKey))
+	copy(data[0:HASH_NUM_BYTES], txIn.PrevTxHash)                             // PrevTxHash
+	copy(data[HASH_NUM_BYTES:4+HASH_NUM_BYTES], packInt(txIn.PrevTxOutIndex)) // PrevTxOut Index
+	copy(data[4+HASH_NUM_BYTES:4+HASH_NUM_BYTES+len(txIn.Sig)], txIn.Sig)     // Sig
+	copy(data[4+HASH_NUM_BYTES+len(txIn.Sig):4+HASH_NUM_BYTES+len(txIn.Sig)+len(txIn.PubKey)],
 		txIn.PubKey) // PubKey
 	return data
 }
 
 func (txIn *TxIn) packNoSig() []byte {
-	data := make([]byte, len(txIn.PrevTxHash) + 4 + len(txIn.PubKey))
-	copy(data[0:HASH_NUM_BYTES], txIn.PrevTxHash) // PrevTxHash
-	copy(data[HASH_NUM_BYTES:4 + HASH_NUM_BYTES], packInt(txIn.PrevTxOutIndex)) // PrevTxOut Index
-	copy(data[4 + HASH_NUM_BYTES: 4 + HASH_NUM_BYTES + len(txIn.PubKey)],
+	data := make([]byte, len(txIn.PrevTxHash)+4+len(txIn.PubKey))
+	copy(data[0:HASH_NUM_BYTES], txIn.PrevTxHash)                             // PrevTxHash
+	copy(data[HASH_NUM_BYTES:4+HASH_NUM_BYTES], packInt(txIn.PrevTxOutIndex)) // PrevTxOut Index
+	copy(data[4+HASH_NUM_BYTES:4+HASH_NUM_BYTES+len(txIn.PubKey)],
 		txIn.PubKey) // PubKey
 	return data
 }
 
-
 func (txOut *TxOut) pack() []byte {
-	data := make([]byte, 4 + len(txOut.PubKeyHash))
-	copy(data[0:4], packInt(txOut.Value)) // Value
-	copy(data[4:4 + PKHASH_NUM_BYTES], txOut.PubKeyHash) // PubKeyHash
+	data := make([]byte, 4+len(txOut.PubKeyHash))
+	copy(data[0:4], packInt(txOut.Value))              // Value
+	copy(data[4:4+PKHASH_NUM_BYTES], txOut.PubKeyHash) // PubKeyHash
 	return data
 }
 
@@ -106,40 +105,40 @@ func (tx *Transaction) HashNoSig() []byte {
 }
 
 func (tx *Transaction) ValidateStructure() (bool, error) {
-    // For Post and Comment TX, there should only be one output (to oneself)
-    if tx.Type == POST || tx.Type == COMMENT {
-        if len(tx.TxOuts) != 1 {
-            return false, errors.New("Transaction should only have one output")
-        }
-        // validate that the rest of the money goes back to original account 
-        // NOTE: problematic if we ever want to support an account to have multiple public keys
-        if !(bytes.Equal(PKHash(tx.TxIns[0].PubKey), tx.TxOuts[0].PubKeyHash)) {
-            return false, errors.New("Output PubKeyHash not consistent with input")
-        }
-    }
-    // Upvote Tx should have 2 outputs
-    if tx.Type == UPVOTE {
-        if len(tx.TxOuts) != 2 {
-            return false, errors.New("Upvote Tx should only have two outputs")
-        }
+	// For Post and Comment TX, there should only be one output (to oneself)
+	if tx.Type == POST || tx.Type == COMMENT {
+		if len(tx.TxOuts) != 1 {
+			return false, errors.New("Transaction should only have one output")
+		}
+		// validate that the rest of the money goes back to original account
+		// NOTE: problematic if we ever want to support an account to have multiple public keys
+		if !(bytes.Equal(PKHash(tx.TxIns[0].PubKey), tx.TxOuts[0].PubKeyHash)) {
+			return false, errors.New("Output PubKeyHash not consistent with input")
+		}
+	}
+	// Upvote Tx should have 2 outputs
+	if tx.Type == UPVOTE {
+		if len(tx.TxOuts) != 2 {
+			return false, errors.New("Upvote Tx should only have two outputs")
+		}
 
-        // validate that second output goes back to original account 
-        // NOTE: problematic if we ever want to support an account to have multiple public keys
-        if !(bytes.Equal(PKHash(tx.TxIns[0].PubKey), tx.TxOuts[1].PubKeyHash)) {
-            return false, errors.New("Output PubKeyHash not consistent with input")
-        }
+		// validate that second output goes back to original account
+		// NOTE: problematic if we ever want to support an account to have multiple public keys
+		if !(bytes.Equal(PKHash(tx.TxIns[0].PubKey), tx.TxOuts[1].PubKeyHash)) {
+			return false, errors.New("Output PubKeyHash not consistent with input")
+		}
 
-    }
+	}
 
-    if tx.Type == COMMENT || tx.Type == UPVOTE {
-        if tx.Parent == nil {
-            return false, errors.New("Comment/Upvote Tx must have parent")
-        }
-    } else { 
-        if tx.Parent != nil {
-            return false, errors.New("Transfer/Post Tx should not parent")
-        }
-    }
-    return true, nil
+	if tx.Type == COMMENT || tx.Type == UPVOTE {
+		if tx.Parent == nil {
+			return false, errors.New("Comment/Upvote Tx must have parent")
+		}
+	} else {
+		if tx.Parent != nil {
+			return false, errors.New("Transfer/Post Tx should not parent")
+		}
+	}
+	return true, nil
 
 }

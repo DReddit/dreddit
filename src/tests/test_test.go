@@ -1,8 +1,8 @@
 package tests
 
 import (
-	"testing"
 	"fmt"
+	"testing"
 )
 
 func TestOnePost(t *testing.T) {

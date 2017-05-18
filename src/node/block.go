@@ -1,11 +1,11 @@
 package node
 
 import (
-	"time"
 	"bytes"
-	"encoding/binary"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
+	"time"
 )
 
 const DIFFICULTY = 4
@@ -14,13 +14,13 @@ const PKHASH_NUM_BYTES = 20
 const DATA_NUM_BYTES = 80
 
 type Block struct {
-	PrevBlock     []byte         // hash of previous block
-	MerkleRoot    []byte         // Merkle Tree root of transactions
-	Timestamp     uint32         // Unix timestamp of when the block was generated
-	Nonce         uint32         // The nonce used to generate this block
-	Bits          uint32         // The calculated difficulty target being used for this block
-	BlockHash     []byte         // hash of all of the above values in this block
-	Transactions  []Transaction  // list of transactions associated with this block
+	PrevBlock    []byte        // hash of previous block
+	MerkleRoot   []byte        // Merkle Tree root of transactions
+	Timestamp    uint32        // Unix timestamp of when the block was generated
+	Nonce        uint32        // The nonce used to generate this block
+	Bits         uint32        // The calculated difficulty target being used for this block
+	BlockHash    []byte        // hash of all of the above values in this block
+	Transactions []Transaction // list of transactions associated with this block
 }
 
 // TODO: we're probably going to need a "Blockchain" struct eventually
@@ -31,18 +31,17 @@ func packInt(myInt uint32) []byte {
 	return data
 }
 
-
 // Returns a string representation of the block
 func (block *Block) toString() string {
 	var repr string
-	repr  =             "  ------------------------------------------------------------------------------\n"
+	repr = "  ------------------------------------------------------------------------------\n"
 	repr += fmt.Sprintf(" / PrevBlock:  %x\n", block.PrevBlock)
 	repr += fmt.Sprintf(" | MerkleRoot: %x\n", block.MerkleRoot)
 	repr += fmt.Sprintf(" | Timestamp:  %d\n", block.Timestamp)
 	repr += fmt.Sprintf(" | Nonce:      %d\n", block.Nonce)
 	repr += fmt.Sprintf(" | Bits:       %d\n", block.Bits)
 	repr += fmt.Sprintf(" \\ BlockHash:  %x\n", block.BlockHash)
-	repr +=             "  ------------------------------------------------------------------------------"
+	repr += "  ------------------------------------------------------------------------------"
 	return repr
 }
 
@@ -54,7 +53,7 @@ func MakeCoinbaseTx(txs []Transaction) Transaction {
 	// TODO: make this customizable
 	// This is pubKey #1
 	pkHash, _ := base64.StdEncoding.DecodeString("ekZtvHY9XwiGbnzyVOvvMhCEDSE=")
-	value := uint32(len(txs) * TX_FEE + TX_COINBASE)
+	value := uint32(len(txs)*TX_FEE + TX_COINBASE)
 	txOut := TxOut{value, pkHash}
 	txOuts := make([]TxOut, 1)
 	txOuts[0] = txOut
@@ -71,16 +70,16 @@ func MakeCoinbaseTx(txs []Transaction) Transaction {
 // the scrypt of the above data satisfies the difficulty constraint
 func proofOfWork(block *Block) {
 	data := make([]byte, DATA_NUM_BYTES)
-	copy(data[0:4], []byte("\x01\x00\x00\x00")) // Version
-	copy(data[4:4 + HASH_NUM_BYTES], block.PrevBlock) // Prev Block Hash
-	copy(data[4 + HASH_NUM_BYTES : 4 + 2*HASH_NUM_BYTES], block.MerkleRoot) // Merkle Root
-	copy(data[4 + 2*HASH_NUM_BYTES : 4 + 2*HASH_NUM_BYTES + 4], packInt(block.Timestamp)) // Timestamp
-	copy(data[8 + 2*HASH_NUM_BYTES : 8 + 2*HASH_NUM_BYTES + 4], packInt(block.Bits)) // Bits
+	copy(data[0:4], []byte("\x01\x00\x00\x00"))                                   // Version
+	copy(data[4:4+HASH_NUM_BYTES], block.PrevBlock)                               // Prev Block Hash
+	copy(data[4+HASH_NUM_BYTES:4+2*HASH_NUM_BYTES], block.MerkleRoot)             // Merkle Root
+	copy(data[4+2*HASH_NUM_BYTES:4+2*HASH_NUM_BYTES+4], packInt(block.Timestamp)) // Timestamp
+	copy(data[8+2*HASH_NUM_BYTES:8+2*HASH_NUM_BYTES+4], packInt(block.Bits))      // Bits
 
 	nonceIndex := 12 + 2*HASH_NUM_BYTES
 	var nonce uint32
 	for {
-		copy(data[nonceIndex:nonceIndex + 4], packInt(nonce)) // Nonce
+		copy(data[nonceIndex:nonceIndex+4], packInt(nonce)) // Nonce
 		hash := Hash(data)
 		if bytes.Equal(hash[0:1], []byte("\x00")) {
 			block.Nonce = nonce
@@ -90,6 +89,7 @@ func proofOfWork(block *Block) {
 		nonce++
 	}
 }
+
 //
 // Generates the Genesis Block for the dreddit blockchain
 // The block consists of 10 transfers of 100 dkarma each to
@@ -151,7 +151,7 @@ func GenerateBlock(blockchain []*Block, txs []Transaction) *Block {
 		// Genesis block has prev block hash set to all 0's
 		newBlock.PrevBlock = make([]byte, HASH_NUM_BYTES)
 	} else {
-		lastBlockHash := blockchain[len(blockchain) - 1].BlockHash
+		lastBlockHash := blockchain[len(blockchain)-1].BlockHash
 		newBlock.PrevBlock = make([]byte, len(lastBlockHash))
 		copy(newBlock.PrevBlock, lastBlockHash)
 	}
