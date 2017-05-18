@@ -17,9 +17,9 @@ import (
 const Debug = 1
 
 type Clerk struct {
-	peermu  sync.Mutex
-	port    string
-	ports   []string
+	peermu  sync.Mutex          // lock on list of dreddit servers
+	port    string              // address of clerk
+	ports   []string            // addresses of dreddit servers
 	servers []*labrpc.ClientEnd // the list of dreddit nodes the clerk knows of
 	clerkId int                 // the unique id of this clerk
 	current int                 // the current server that this clerk will talk to

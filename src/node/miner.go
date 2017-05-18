@@ -280,8 +280,8 @@ func (node *DRNode) replayLog() {
 	}
 }
 
-// TODO: important, need to update utxo here!
 // This function handles our logic on updating the blockchain upon receiving a block
+// We roughly follow this guide: https://en.bitcoin.it/wiki/Protocol_rules#.22block.22_messages
 func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error {
 	DPrintf("%d received a block with hash %x", node.me, args.SentBlock.BlockHash)
 
@@ -293,9 +293,26 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 
 	node.Log = append(node.Log, *newBlock)
 
+	succ, err := ValidateBlock(newBlock)
+	if !succ {
+		return err
+	}
+
 	if len(node.Blockchain) == 0 ||
 		bytes.Compare(prevHash, node.Blockchain[len(node.Blockchain)-1].BlockHash) == 0 { // adds to main chain
+		succ, err := node.validateBlockTxs(newBlock)
+		if !succ {
+			return false, err
+		}
+		// append to main chain
 		node.Blockchain = append(node.Blockchain, newBlock)
+
+		// Finally, mark all the successful transactions as valid
+		node.utxoMu.Lock()
+		for _, tx := range newBlock.Transactions {
+			node.UpdateUtxoDb(tx)
+		}
+		node.utxoMu.Unlock()
 		return nil
 	}
 
@@ -373,6 +390,7 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 
 	newLength := curSideChain.Depth + curSideChain.ParentIndex + 2
 	if newLength > len(node.Blockchain) { // breaks ties in favor of current mainchain so >
+		// TODO: gotta validate the side chain before doing this
 		breakPoint := curSideChain.ParentIndex
 		breakMainChain := node.Blockchain[curSideChain.ParentIndex+1 : len(node.Blockchain)]
 
@@ -644,7 +662,7 @@ func (node *DRNode) mine() {
 					// remember to validate against the entire blockchain PLUS
 					// all transactions currently in txNodes!
 
-					succ, err := node.ValidateTransaction(&txNode.Tx)
+					succ, err := node.validateTransaction(&txNode.Tx)
 
 					// If the transaction isn't valid, mark it as such here
 					if !succ {
@@ -657,8 +675,18 @@ func (node *DRNode) mine() {
 				}
 			}
 
+			// Grab prevblock hash
+			node.bcmu.Lock()
+			prevBlockHash := make([]byte, HASH_NUM_BYTES)
+			if len(node.Blockchain) != 0 {
+				// Genesis block has prev block hash set to all 0's
+				lastBlockHash := node.Blockchain[len(node.Blockchain)-1].BlockHash
+				copy(prevBlockHash, lastBlockHash)
+			}
+			node.bcmu.Unlock()
+
 			// Next generate a block that includes all these transactions
-			newBlock := GenerateBlock(node.Blockchain, txs)
+			newBlock := GenerateBlock(prevBlockHash, txs)
 
 			node.bcmu.Lock()
 
@@ -688,6 +716,7 @@ func (node *DRNode) mine() {
 				// update UTXO with coinbase tx
 				node.UpdateUtxoDb(newBlock.Transactions[len(newBlock.Transactions)-1])
 				node.numPending -= len(txNodes)
+				node.utxoMu.Unlock()
 			}
 
 			node.bcmu.Unlock()
@@ -714,7 +743,7 @@ func (node *DRNode) VerifySignature(txIn *TxIn, txHashNoSig []byte) bool {
 	return signature.Verify(txHashNoSig, pubKey)
 }
 
-func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
+func (node *DRNode) validateTransaction(tx *Transaction) (bool, error) {
 	DPrintf("%d validating transaction %v", node.me, tx.Id())
 
 	// TxIn & TxOut are not empty
@@ -772,6 +801,33 @@ func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
 		}
 	}
 
+	return true, nil
+}
+
+//
+// Given a validated (structurally) block; check that:
+//   - each non-coinbase transaction is valid against the current blockchain
+//   - the coinbase transaction's value is equal to the sum of the
+//     transaction fees plus the mining reward
+func (node *DRNode) validateBlockTxs(newBlock *Block) (bool, error) {
+	for _, tx := newBlock.Transactions {
+		if tx.Type != COINBASE {
+			succ, err := tx.ValidateStructure()
+			if !succ {
+				return false, err
+			}
+			succ, err := node.validateTransaction(tx)
+			if !succ {
+				return false, err
+			}
+		} else {
+			if tx.TxOuts[0].Value != (len(newBlock.Transactions) - 1) * TX_FEE + TX_COINBASE {
+				return false, errors.New("Coinbase value is wrong")
+			}
+		}
+		// TODO: tx's need to be validated against *each other* within this new block
+		// not sure where or how btc does this?
+	}
 	return true, nil
 }
 

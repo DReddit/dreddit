@@ -31,6 +31,18 @@ func packInt(myInt uint32) []byte {
 	return data
 }
 
+// Packs the hashed components of a block into an 80-byte slice
+func pack(block *Block) []byte {
+	data := make([]byte, DATA_NUM_BYTES)
+	copy(data[0:4], []byte("\x01\x00\x00\x00"))                                   // Version
+	copy(data[4:4+HASH_NUM_BYTES], block.PrevBlock)                               // Prev Block Hash
+	copy(data[4+HASH_NUM_BYTES:4+2*HASH_NUM_BYTES], block.MerkleRoot)             // Merkle Root
+	copy(data[4+2*HASH_NUM_BYTES:4+2*HASH_NUM_BYTES+4], packInt(block.Timestamp)) // Timestamp
+	copy(data[8+2*HASH_NUM_BYTES:8+2*HASH_NUM_BYTES+4], packInt(block.Bits))      // Bits
+	copy(data[nonceIndex:nonceIndex+4], packInt(block.Nonce))                     // Nonce
+	return data
+}
+
 // Returns a string representation of the block
 func (block *Block) toString() string {
 	var repr string
@@ -61,6 +73,30 @@ func MakeCoinbaseTx(txs []Transaction) Transaction {
 	return Transaction{COINBASE, nil, txOuts, nil, nil}
 }
 
+func VerifyCoinbaseTx(tx Transaction) (bool, error) {
+	if tx.Type != COINBASE {
+		return false, errors.New("last transaction is not coinbase")
+	}
+
+	if tx.TxIns != nil {
+		return false, errors.New("coinbase transaction has non-empty txIn")
+	}
+
+	if len(tx.TxOuts) != 1 {
+		return false, errors.New("coinbase transaction has more or less than one txOut")
+	}
+
+	if tx.Parent != nil {
+		return false, errors.New("coinbase transaction has non-empty parent")
+	}
+
+	if tx.Content != nil {
+		return false, errors.New("coinbase transaction has non-empty content")
+	}
+
+	return true, nil
+}
+
 // Given a new block with a provided
 //  MerkleRoot
 //  PrevBlock
@@ -69,19 +105,14 @@ func MakeCoinbaseTx(txs []Transaction) Transaction {
 // computes and sets a Nonce and BlockHash such that
 // the scrypt of the above data satisfies the difficulty constraint
 func proofOfWork(block *Block) {
-	data := make([]byte, DATA_NUM_BYTES)
-	copy(data[0:4], []byte("\x01\x00\x00\x00"))                                   // Version
-	copy(data[4:4+HASH_NUM_BYTES], block.PrevBlock)                               // Prev Block Hash
-	copy(data[4+HASH_NUM_BYTES:4+2*HASH_NUM_BYTES], block.MerkleRoot)             // Merkle Root
-	copy(data[4+2*HASH_NUM_BYTES:4+2*HASH_NUM_BYTES+4], packInt(block.Timestamp)) // Timestamp
-	copy(data[8+2*HASH_NUM_BYTES:8+2*HASH_NUM_BYTES+4], packInt(block.Bits))      // Bits
-
+	data := pack(block)
 	nonceIndex := 12 + 2*HASH_NUM_BYTES
 	var nonce uint32
+	leadingZeros := make([]byte, block.Bits)
 	for {
 		copy(data[nonceIndex:nonceIndex+4], packInt(nonce)) // Nonce
 		hash := Hash(data)
-		if bytes.Equal(hash[0:1], []byte("\x00")) {
+		if bytes.Equal(hash[0:block.Bits], leadingZeros) {
 			block.Nonce = nonce
 			block.BlockHash = hash
 			return
@@ -141,20 +172,13 @@ func GenerateGenesisBlock() *Block {
 }
 
 //
-// Given a list of validated transactions and the current state of the blockchain
-// generates a new valid block using the transactions and returns it
-func GenerateBlock(blockchain []*Block, txs []Transaction) *Block {
+// Given a list of validated transactions and the previous blockhash
+// generate a new valid block using the transactions and returns it
+func GenerateBlock(prevBlockHash []byte, txs []Transaction) *Block {
 	newBlock := new(Block)
 
 	// PrevBlock
-	if len(blockchain) == 0 {
-		// Genesis block has prev block hash set to all 0's
-		newBlock.PrevBlock = make([]byte, HASH_NUM_BYTES)
-	} else {
-		lastBlockHash := blockchain[len(blockchain)-1].BlockHash
-		newBlock.PrevBlock = make([]byte, len(lastBlockHash))
-		copy(newBlock.PrevBlock, lastBlockHash)
-	}
+	newBlock.PrevBlock = prevBlockHash
 
 	// Coinbase
 	txs = append(txs, MakeCoinbaseTx(txs))
@@ -178,4 +202,60 @@ func GenerateBlock(blockchain []*Block, txs []Transaction) *Block {
 	newBlock.Transactions = txs
 
 	return newBlock
+}
+
+//
+// Given a block, validates:
+//  - difficulty
+//  - merkle root
+//  - proof of work
+//  - coinbase
+//  - misc.
+func ValidateBlock(block *Block) (bool, error) {
+	// transaction list is non-empty:
+	if len(block.Transactions) == 0 {
+		return false, errors.New("Transaction list should be non-empty")
+	}
+
+	// bits must be set to the correct difficulty
+	if block.Bits != DIFFICULTY {
+		return false, errors.New("Block difficulty set incorrectly")
+	}
+
+	// block hash must include Bits leading 0's
+	leadingZeros := make([]byte, block.Bits)
+	if !bytes.Equal(block.BlockHash[0:block.Bits], leadingZeros) {
+		return false, errors.New("Block hash does not match difficulty")
+	}
+
+	// block.BlockHash must match hash of block
+	data := pack(block)
+	hash := Hash(data)
+	if !bytes.Equal(block.BlockHash, hash) {
+		return false, errors.New("Block hash is incorrect")
+	}
+
+	// Merkle Root must be computed correctly
+	merkle := BuildMerkleTreeStore(block.Transactions)
+	if !bytes.Equal(block.MerkleRoot, merkle) {
+		return false, errors.New("Merkle root is incorrect")
+	}
+
+	// Coinbase transaction must be last
+	txCoinbase := block.Transactions[len(block.Transactions) - 1]
+	succ, err := VerifyCoinbaseTx(txCoinbase)
+	if !succ {
+		return false, err
+	}
+
+	// None of the other transactions can be coinbase:
+	for i, tx := range(block.Transactions) {
+		if i != len(block.Transactions) - 1 {
+			if tx.Type == COINBASE {
+				return false, errors.New("coinbase transaction found in non-last spot")
+			}
+		}
+	}
+
+	return true, nil
 }
