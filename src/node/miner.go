@@ -136,6 +136,11 @@ func StartDRNode(me int, port string, pubHash string, servers []string) *DRNode 
 	// channels
 	node.quit = make(chan int)
 
+  node.bootstrap()
+  for _, block := range node.Blockchain {
+    DPrintf("Genesis Block:\n%v", block.ToString())
+  }
+  
 	for _, serverPort := range servers {
 		client, err := rpc.DialHTTPPath("tcp", "localhost:"+serverPort, "/dreddit"+serverPort)
 		if err == nil {
@@ -143,7 +148,7 @@ func StartDRNode(me int, port string, pubHash string, servers []string) *DRNode 
 			node.servers = append(node.servers, client)
 			node.ports = append(node.ports, serverPort)
 
-			if len(node.Blockchain) == 0 {
+			if len(node.Blockchain) == 1 { // only genesis block
 				args := BlockArgs{}
 				reply := BlockReply{}
 				// we don't put this in a goroutine because we want to wait
@@ -161,9 +166,6 @@ func StartDRNode(me int, port string, pubHash string, servers []string) *DRNode 
 		}
 	}
 
-	DPrintf(rpc.DefaultRPCPath)
-	DPrintf(rpc.DefaultDebugPath)
-
 	server := rpc.NewServer()
 	server.RegisterName("DRNode", node)
 	server.HandleHTTP("/dreddit"+port, "/debug/dreddit"+port)
@@ -175,12 +177,7 @@ func StartDRNode(me int, port string, pubHash string, servers []string) *DRNode 
 
 	// If our blockchain is still empty, we must be the first-ish node in the network!
 	// We'll set up the canonical dreddit genesis block
-	if len(node.Blockchain) == 0 {
-		node.bootstrap()
-		for _, block := range node.Blockchain {
-			DPrintf("Genesis Block:\n%v", block.ToString())
-		}
-	}
+
 	go node.mine()
 
 	return node
@@ -324,7 +321,9 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 		node.utxoMu.Lock()
 		for _, tx := range newBlock.Transactions {
 			if tx.Type != COINBASE {
-				node.PendingTxs[string((&tx).Hash())].Status = SUCCESS
+        if val, ok := node.PendingTxs[string((&tx).Hash())]; ok {
+          val.Status = SUCCESS
+        }
 			}
 			node.updateUtxoDb(tx)
 		}
