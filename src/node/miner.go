@@ -2,11 +2,15 @@ package node
 
 import (
 	"bytes"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/rpc"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"github.com/btcsuite/btcd/btcec"
+	"log"
 	"sync"
 	"time"
 )
@@ -23,16 +27,25 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 
 type DRNode struct {
 	// Represents state for a dreddit mining node
+	me           int             // id of this node
+
+	// locks (must always be acquired in this order!)
 	mu           sync.Mutex      // lock on DRNode's state
 	bcmu         sync.Mutex      // lock on the blockchain
-	me           int             // id of this node
+	utxoMu       sync.Mutex      // lock on DRNode's UTXO
+
+	// transactions
 	numPending   int             // number of pending transactions
 	PendingTxs   map[int]*TxNode // map from ClerkId to last pending transaction
 	SeenTxs      map[string]bool // stores if we've seen a Tx before
+
+	// blockchain
 	Blockchain   []*Block        // current view of the blockchain
 	SideChains   []*SideChain    // non-main chains rooted somewhere on blockchain
 	OrphanChains []*SideChain    // non-main chains whoes earliest block is parent-less
 	Log          []Block         // log of blocks for replay purposes
+
+	// networking
 	port         string          // port of this server
 	ports        []string        // ports of this server's peers
 	servers      []*rpc.Client   // list of this server's peers
@@ -40,10 +53,10 @@ type DRNode struct {
 	listener     net.Listener    // rpc listener
 
 	// channels
-	chNewTx    chan bool        // channel to inform of new tx
-	chNewBlock chan bool        // channel to inform of new block
-	gossip     chan GossipReply // the gossip we get back
-	quit       chan int         // channel to send kill message
+	chNewTx    chan bool         // channel to inform of new tx
+	chNewBlock chan bool         // channel to inform of new block
+	gossip     chan GossipReply  // the gossip we get back
+	quit       chan int          // channel to send kill message
 }
 
 const (
@@ -75,7 +88,7 @@ type DummyArgs struct {
 }
 
 type DummyReply struct {
-	Retval int
+	RetVal int
 }
 
 // Kills this node
@@ -89,20 +102,27 @@ func (node *DRNode) Kill(args *DummyArgs, reply *DummyReply) error {
 	return nil
 }
 
-// Starts DReddit node
+// Starts dreddit node
 func StartDRNode(me int, port string, servers []string) *DRNode {
 	DPrintf("Started new DRNode with id %d", me)
 	node := new(DRNode)
 	node.me = me
+
+	// transactions
 	node.PendingTxs = make(map[int]*TxNode)
 	node.SeenTxs = make(map[string]bool)
 	node.numPending = 0
+
+	// blockchain
 	node.Blockchain = make([]*Block, 0)
 	node.Log = make([]Block, 0)
+
+	// networking
 	node.port = port
 	node.ports = make([]string, 0)
 	node.servers = make([]*rpc.Client, 0)
 
+	// channels
 	node.quit = make(chan int)
 
 	for _, serverPort := range servers {
@@ -115,9 +135,14 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
 			if len(node.Blockchain) == 0 {
 				args := BlockArgs{}
 				reply := BlockReply{}
-				err := client.Call("DRNode.GetBlockChain", &args, &reply) // we don't put this in a goroutine because we want to wait
+				// we don't put this in a goroutine because we want to wait
+				err := client.Call("DRNode.GetBlockChain", &args, &reply)
 
 				if err == nil {
+					// When a new node connects to the dreddit network, it gets the blockchain
+					// from another node as well as a list of all blocks that node received in order
+					// it then replays this block log to produce an identical block tree complete with
+					// sidechains and orphan blocks
 					node.Log = reply.Log
 					node.replayLog()
 				}
@@ -136,6 +161,15 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
 	go http.Serve(l, nil)
 
 	go node.gossipProtocol()
+
+	// If our blockchain is still empty, we must be the first-ish node in the network!
+	// We'll set up the canonical dreddit genesis block
+	if len(node.Blockchain) == 0 {
+		node.Bootstrap()
+		for _, block := range node.Blockchain {
+			DPrintf("Genesis Block:\n%v", block.toString())
+		}
+	}
 	go node.mine()
 
 	return node
@@ -143,7 +177,7 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
 
 // used purely for testing
 func (node *DRNode) GetPeerSize(args *DummyArgs, reply *DummyReply) error {
-	reply.Retval = len(node.ports)
+	reply.RetVal = len(node.ports)
 	return nil
 }
 
@@ -246,6 +280,7 @@ func (node *DRNode) replayLog() {
 	}
 }
 
+// TODO: important, need to update utxo here!
 // This function handles our logic on updating the blockchain upon receiving a block
 func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error {
 	DPrintf("%d received a block with hash %x", node.me, args.SentBlock.BlockHash)
@@ -426,7 +461,63 @@ func (node *DRNode) gossipProtocol() {
 			}
 			node.peermu.Unlock()
 			gossipTimeout.Reset(time.Duration(100+rand.Intn(100)) * time.Millisecond)
+		}
+	}
+}
 
+// Updates the node's UTXO with the new tranasction tx
+func (node *DRNode) UpdateUtxoDb(tx Transaction) {
+	for _, txIn := range tx.TxIns {
+		txHash := string(txIn.PrevTxHash)
+		uidx := txIn.PrevTxOutIndex
+		utxoEntry, ok := node.Utxo.Entries[txHash]
+		if ok {
+			utxoEntry.outputs[uidx].Spent = true
+			// if remaining outputs of this transaction are all spent, remove tx from UTXO
+			removeTx := true
+			for _, utxoOutput := range utxoEntry.outputs {
+				if utxoOutput.Spent == false {
+					removeTx = false
+					break
+				}
+			}
+			if removeTx {
+				delete(node.Utxo.Entries, txHash)
+			}
+		} else {
+			// This shouldn't happen if validation is successful
+			DPrintf("Detected Invalid Transaction while adding %v to UTXO", tx)
+			panic(errors.New("invalid transaction detected"))
+		}
+	}
+
+	txHash := string(tx.Hash())
+	for idx, txOut := range tx.TxOuts {
+		uidx := uint32(idx)
+		if _, ok := node.Utxo.Entries[txHash]; !ok {
+			node.Utxo.Entries[txHash] = new(UtxoEntry)
+			node.Utxo.Entries[txHash].outputs = make(map[uint32]*UtxoOutput)
+		}
+		node.Utxo.Entries[txHash].outputs[uidx] = &UtxoOutput{false, txOut.PubKeyHash, txOut.Value}
+		DPrintf("Successfully Updated UTXO: %v %v", base64.StdEncoding.EncodeToString(txOut.PubKeyHash), txOut.Value)
+	}
+
+}
+
+// Bootstrapping mining node
+// - give initial genesis block
+// - fill UTXO accordingly
+func (node *DRNode) Bootstrap() {
+	DPrintf("DRNode %d: boostrapping blockchain", node.me)
+	node.Blockchain = make([]*Block, 0)
+	genesisBlock := GenerateGenesisBlock()
+	node.Blockchain = append(node.Blockchain, genesisBlock)
+
+	node.Utxo = new(UtxoDb)
+	node.Utxo.Entries = make(map[string]*UtxoEntry)
+	for _, block := range node.Blockchain {
+		for _, tx := range block.Transactions {
+			node.UpdateUtxoDb(tx)
 		}
 	}
 }
@@ -494,6 +585,7 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
 	node.mu.Unlock()
 	DPrintf("%d successfully started AppendTx request for client %d", node.me, args.ClerkId)
 
+	// flood the transaction to our peers
 	node.peermu.Lock()
 	for _, client := range node.servers {
 		go func(c *rpc.Client) {
@@ -551,10 +643,17 @@ func (node *DRNode) mine() {
 					// TODO actually validate the transaction here
 					// remember to validate against the entire blockchain PLUS
 					// all transactions currently in txNodes!
-					txs = append(txs, txNode.Tx)
-					txNodes = append(txNodes, txNode)
+
+					succ, err := node.ValidateTransaction(&txNode.Tx)
 
 					// If the transaction isn't valid, mark it as such here
+					if !succ {
+						DPrintf("Error while validating transaction: %v", err)
+						node.PendingTxs[txNode.ClerkId].Status = INVALID
+					} else {
+						txs = append(txs, txNode.Tx)
+						txNodes = append(txNodes, txNode)
+					}
 				}
 			}
 
@@ -581,9 +680,13 @@ func (node *DRNode) mine() {
 				DPrintf("%d appended a new block to the blockchain:\n%s", node.me, newBlock.toString())
 
 				// Finally, mark all the successful transactions as valid
+				node.utxoMu.Lock()
 				for _, txNode := range txNodes {
 					node.PendingTxs[txNode.ClerkId].Status = SUCCESS
+					node.UpdateUtxoDb(txNode.Tx)
 				}
+				// update UTXO with coinbase tx
+				node.UpdateUtxoDb(newBlock.Transactions[len(newBlock.Transactions)-1])
 				node.numPending -= len(txNodes)
 			}
 
@@ -594,4 +697,91 @@ func (node *DRNode) mine() {
 		// TODO: again, use channels or condition variables here too
 		time.Sleep(time.Millisecond * 100)
 	}
+}
+
+// Verify the signature of a TxIn, given the input tx's signature-free hash
+func (node *DRNode) VerifySignature(txIn *TxIn, txHashNoSig []byte) bool {
+	signature, err := btcec.ParseSignature(txIn.Sig, btcec.S256())
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+	pubKey, err := btcec.ParsePubKey(txIn.PubKey, btcec.S256())
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+	return signature.Verify(txHashNoSig, pubKey)
+}
+
+func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
+	DPrintf("%d validating transaction %v", node.me, tx.Id())
+
+	// TxIn & TxOut are not empty
+	if len(tx.TxIns) == 0 || len(tx.TxOuts) == 0 {
+		return false, errors.New("TxIns and TxOuts must not be empty")
+	}
+
+	// Sum of Inputs is greater than sum of outputs
+	var inputSum uint32
+	var outputSum uint32
+	for _, txIn := range tx.TxIns {
+		utxoEntry, ok := node.Utxo.Entries[string(txIn.PrevTxHash)]
+		if ok && utxoEntry.outputs[txIn.PrevTxOutIndex].Spent == false {
+
+			// if valid txIn, validate signature
+			if !(node.VerifySignature(&txIn, tx.HashNoSig())) {
+				return false, errors.New("Invalid transaction signature")
+			}
+
+			// validate hash(pubkey) == pubkeyhash of output
+			if !(bytes.Equal(utxoEntry.outputs[txIn.PrevTxOutIndex].PubKeyHash, PKHash(txIn.PubKey))) {
+				return false, errors.New("PubKeyHashes don't match")
+			}
+
+			// TODO: validate that txIn is spendable.
+			// Need to traverse last 10 blocks of blockchain and validate that transaction does not exist in those blocks
+
+			inputSum += utxoEntry.outputs[txIn.PrevTxOutIndex].Value
+
+		} else {
+			return false, errors.New("Invalid input transaction provided: missing or spent")
+		}
+	}
+	for _, txOut := range tx.TxOuts {
+		outputSum += txOut.Value
+	}
+
+	if inputSum+TX_FEE < outputSum {
+		return false, errors.New("Input sum (plus fee) is less than output sum")
+	}
+
+	// validate that transaction has right structure (number of outputs)
+	if ok, err := tx.ValidateStructure(); !ok {
+		return false, err
+	}
+
+	// At this point Tx are structurally valid
+	if tx.Type == COMMENT || tx.Type == UPVOTE {
+		parentTx := node.FindTxInBlockChain(tx.Parent)
+		if parentTx == nil || !(parentTx.Type == POST || parentTx.Type == COMMENT) {
+			return false, errors.New("Invalid parent Tx Hash provided")
+		}
+		if tx.Type == UPVOTE && !(bytes.Equal(tx.TxOuts[0].PubKeyHash, parentTx.TxOuts[0].PubKeyHash)) {
+			return false, errors.New("Parent PubKeyHash not matching")
+		}
+	}
+
+	return true, nil
+}
+
+func (node *DRNode) FindTxInBlockChain(txHash []byte) *Transaction {
+	for _, block := range node.Blockchain {
+		for _, tx := range block.Transactions {
+			if bytes.Equal(tx.Hash(), txHash) {
+				return &tx
+			}
+		}
+	}
+	return nil
 }

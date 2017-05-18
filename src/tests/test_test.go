@@ -113,7 +113,7 @@ func TestGossip(t *testing.T) {
 	for i := 0; i < nservers; i++ {
 		dummyReply := node.DummyReply{}
 		drNodes[i].GetPeerSize(nil, &dummyReply)
-		size := dummyReply.Retval
+		size := dummyReply.RetVal
 		if size != nservers - 1 {
 			 t.Fatal("Did not learn group of peers quickly enough, miner %d only knows %d peers", i, size)
 		}
@@ -164,7 +164,7 @@ func TestChainResolution(t *testing.T) {
 	for i := 0; i < nservers; i++ {
 		dummyReply := node.DummyReply{}
 		drNodes[i].GetPeerSize(nil, &dummyReply)
-		size := dummyReply.Retval
+		size := dummyReply.RetVal
 		if size != nservers - 1 {
 			 t.Fatal("Did not learn group of peers quickly enough, miner %d only knows %d peers", i, size)
 		}

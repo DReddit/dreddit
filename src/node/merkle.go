@@ -30,7 +30,7 @@ func HashMerkleBranches(left []byte, right []byte) []byte {
 	copy(hashData[:HASH_NUM_BYTES], left[:])
 	copy(hashData[HASH_NUM_BYTES:], right[:])
 
-	return hash(hashData[:])
+	return Hash(hashData[:])
 }
 
 // BuildMerkleTreeStore creates a merkle tree from a slice of transactions,
@@ -97,5 +97,5 @@ func BuildMerkleTreeStore(transactions []Transaction) []byte {
 		offset++
 	}
 
-	return merkles[len(merkles) - 1]
+	return merkles[len(merkles)-1]
 }
