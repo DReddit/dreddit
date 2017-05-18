@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 	"time"
+	"util"
 )
 
 func cleanUp(drNodes []*node.DRNode) {
@@ -19,7 +20,6 @@ func TestOnePost(t *testing.T) {
 	fmt.Printf("Test: Basic setup with one miner, one user, one post ...\n")
 	const nservers = 1
 	const nclients = 1
-	const unreliable = false
 	const tag = "basic_one_post"
 
 	drNodes := make([]*node.DRNode, nservers)
@@ -27,13 +27,15 @@ func TestOnePost(t *testing.T) {
 	empty := make([]string, 0)
 	serverPorts := make([]string, nservers)
 
+	pkPairs := util.ReadPKPairs()
+
 	for i := 0; i < nservers; i++ {
-		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+10000), empty)
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+10000), pkPairs[i].PubHash, empty)
 		serverPorts[i] = strconv.Itoa(i + 10000)
 	}
 
 	for i := 0; i < nclients; i++ {
-		clients[i] = clerk.MakeClerk(strconv.Itoa(i+10100), serverPorts)
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+10100), pkPairs[nservers+i].Priv, serverPorts)
 	}
 
 	defer cleanUp(drNodes)
@@ -52,7 +54,6 @@ func TestMultiplePosts(t *testing.T) {
 	fmt.Printf("Test: Basic setup with one miner, one user, ten posts ...\n")
 	const nservers = 1
 	const nclients = 1
-	const unreliable = false
 	const tag = "basic_multiple_posts"
 
 	drNodes := make([]*node.DRNode, nservers)
@@ -60,13 +61,15 @@ func TestMultiplePosts(t *testing.T) {
 	empty := make([]string, 0)
 	serverPorts := make([]string, nservers)
 
+	pkPairs := util.ReadPKPairs()
+
 	for i := 0; i < nservers; i++ {
-		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+2000), empty)
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+2000), pkPairs[i].PubHash, empty)
 		serverPorts[i] = strconv.Itoa(i + 2000)
 	}
 
 	for i := 0; i < nclients; i++ {
-		clients[i] = clerk.MakeClerk(strconv.Itoa(i+2100), serverPorts)
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+2100), pkPairs[nservers+i].Priv, serverPorts)
 	}
 
 	defer cleanUp(drNodes)
@@ -84,10 +87,9 @@ func TestMultiplePosts(t *testing.T) {
 }
 
 func TestGossip(t *testing.T) {
-	fmt.Printf("Test: Setup with ten miners, one user, one post ...\n")
-	const nservers = 10
+	fmt.Printf("Test: Setup with nine miners, one user, one post ...\n")
+	const nservers = 9
 	const nclients = 1
-	const unreliable = false
 	const tag = "basic_one_post"
 
 	drNodes := make([]*node.DRNode, nservers)
@@ -95,13 +97,15 @@ func TestGossip(t *testing.T) {
 	empty := make([]string, 0)
 	serverPorts := make([]string, nservers)
 
-	drNodes[0] = node.StartDRNode(0, "13000", empty)
+	pkPairs := util.ReadPKPairs()
+
+	drNodes[0] = node.StartDRNode(0, "13000", pkPairs[0].PubHash, empty)
 	serverPorts[0] = "13000"
 
 	for i := 1; i < nservers; i++ {
 		knownPorts := make([]string, 1)
 		knownPorts[0] = strconv.Itoa(i + 12999)
-		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+13000), knownPorts)
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+13000), pkPairs[i].PubHash, knownPorts)
 		serverPorts[i] = strconv.Itoa(i + 13000)
 	}
 
@@ -119,7 +123,7 @@ func TestGossip(t *testing.T) {
 	}
 
 	for i := 0; i < nclients; i++ {
-		clients[i] = clerk.MakeClerk(strconv.Itoa(i+3100), serverPorts)
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+3100), pkPairs[nservers+i].Priv, serverPorts)
 	}
 
 	ck := clients[0]
@@ -138,7 +142,6 @@ func TestChainResolution(t *testing.T) {
 	fmt.Printf("Test: Setup with five miners, five users, one post each ...\n")
 	const nservers = 5
 	const nclients = 5
-	const unreliable = false
 	const tag = "basic_one_post"
 
 	drNodes := make([]*node.DRNode, nservers)
@@ -146,13 +149,15 @@ func TestChainResolution(t *testing.T) {
 	empty := make([]string, 0)
 	serverPorts := make([]string, nservers)
 
-	drNodes[0] = node.StartDRNode(0, "14000", empty)
+	pkPairs := util.ReadPKPairs()
+
+	drNodes[0] = node.StartDRNode(0, "14000", pkPairs[0].PubHash, empty)
 	serverPorts[0] = "14000"
 
 	for i := 1; i < nservers; i++ {
 		knownPorts := make([]string, 1)
 		knownPorts[0] = strconv.Itoa(i + 13999)
-		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+14000), knownPorts)
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+14000), pkPairs[i].PubHash, knownPorts)
 		serverPorts[i] = strconv.Itoa(i + 14000)
 	}
 
@@ -170,7 +175,7 @@ func TestChainResolution(t *testing.T) {
 	}
 
 	for i := 0; i < nclients; i++ {
-		clients[i] = clerk.MakeClerk(strconv.Itoa(i+3100), serverPorts)
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+3100), pkPairs[nservers+i].Priv, serverPorts)
 	}
 
 	for i := 0; i < 5; i++ {

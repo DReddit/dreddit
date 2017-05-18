@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const DIFFICULTY = 4
+const DIFFICULTY = 1
 const HASH_NUM_BYTES = 32
 const PKHASH_NUM_BYTES = 20
 const DATA_NUM_BYTES = 80
@@ -58,14 +58,12 @@ func (block *Block) toString() string {
 	return repr
 }
 
-// Given a list of transactions
+// Given a list of transactions and a pubKey hash
 // compute a coinbase tranasction which
 //  - consumes each of the tx fees
 //  - includes the mining reward
-func MakeCoinbaseTx(txs []Transaction) Transaction {
-	// TODO: make this customizable
-	// This is pubKey #1
-	pkHash, _ := base64.StdEncoding.DecodeString("ekZtvHY9XwiGbnzyVOvvMhCEDSE=")
+func MakeCoinbaseTx(txs []Transaction, pubHash string) Transaction {
+	pkHash, _ := base64.StdEncoding.DecodeString(pubHash)
 	value := uint32(len(txs)*TX_FEE + TX_COINBASE)
 	txOut := TxOut{value, pkHash}
 	txOuts := make([]TxOut, 1)
@@ -175,14 +173,16 @@ func GenerateGenesisBlock() *Block {
 //
 // Given a list of validated transactions and the previous blockhash
 // generate a new valid block using the transactions and returns it
-func GenerateBlock(prevBlockHash []byte, txs []Transaction) *Block {
+func GenerateBlock(prevBlockHash []byte, txs []Transaction, pubHash string) *Block {
 	newBlock := new(Block)
+
+	DPrintf("this is pubhash: %s", pubHash)
 
 	// PrevBlock
 	newBlock.PrevBlock = prevBlockHash
 
 	// Coinbase
-	txs = append(txs, MakeCoinbaseTx(txs))
+	txs = append(txs, MakeCoinbaseTx(txs, pubHash))
 
 	// MerkleRoot
 	newBlock.MerkleRoot = BuildMerkleTreeStore(txs)

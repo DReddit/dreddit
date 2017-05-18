@@ -27,7 +27,8 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 
 type DRNode struct {
 	// Represents state for a dreddit mining node
-	me int // id of this node
+	me      int    // id of this node
+	pubHash string // hash of public key of this node
 
 	// locks (must always be acquired in this order!)
 	mu     sync.Mutex // lock on DRNode's state
@@ -106,10 +107,11 @@ func (node *DRNode) Kill(args *DummyArgs, reply *DummyReply) error {
 }
 
 // Starts dreddit node
-func StartDRNode(me int, port string, servers []string) *DRNode {
+func StartDRNode(me int, port string, pubHash string, servers []string) *DRNode {
 	DPrintf("Started new DRNode with id %d", me)
 	node := new(DRNode)
 	node.me = me
+	node.pubHash = pubHash
 
 	// transactions
 	node.PendingTxs = make(map[int]*TxNode)
@@ -520,9 +522,8 @@ func (node *DRNode) updateUtxoDb(tx Transaction) {
 			node.Utxo.Entries[txHash].outputs = make(map[uint32]*UtxoOutput)
 		}
 		node.Utxo.Entries[txHash].outputs[uidx] = &UtxoOutput{false, txOut.PubKeyHash, txOut.Value}
-		DPrintf("Successfully Updated UTXO: %v %v", base64.StdEncoding.EncodeToString(txOut.PubKeyHash), txOut.Value)
+		DPrintf("%d successfully Updated UTXO: %v %v", node.me, base64.StdEncoding.EncodeToString(txOut.PubKeyHash), txOut.Value)
 	}
-
 }
 
 // Bootstrapping mining node
@@ -689,7 +690,7 @@ func (node *DRNode) mine() {
 			node.bcmu.Unlock()
 
 			// Next generate a block that includes all these transactions
-			newBlock := GenerateBlock(prevBlockHash, txs)
+			newBlock := GenerateBlock(prevBlockHash, txs, node.pubHash)
 
 			node.bcmu.Lock()
 
@@ -803,7 +804,6 @@ func (node *DRNode) validateTransaction(tx *Transaction) (bool, error) {
 			return false, errors.New("Parent PubKeyHash not matching")
 		}
 	}
-
 	return true, nil
 }
 

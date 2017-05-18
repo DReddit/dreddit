@@ -42,7 +42,7 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 	return
 }
 
-func MakeClerk(port string, servers []string) *Clerk {
+func MakeClerk(port string, privKey string, servers []string) *Clerk {
 	ck := new(Clerk)
 	ck.clerkId = int(nrand())
 	ck.current = 0
@@ -60,9 +60,7 @@ func MakeClerk(port string, servers []string) *Clerk {
 		}
 	}
 
-	// Decode a hardcoded b64-encoded private key (TODO: allow specifying key on startup)
-	// This is privKey #7
-	pkBytes, err := base64.StdEncoding.DecodeString("p4BuPO9r2e4Wl/45lVCEzDaFnP2k3IfALlTxF4vwMHg=")
+	pkBytes, err := base64.StdEncoding.DecodeString(privKey)
 	if err != nil {
 		fmt.Println(err)
 		return nil
