@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
+    "fmt"
 )
 
 const (
@@ -74,7 +75,7 @@ func (tx *Transaction) Id() string {
 //  - Merkle Tree
 //  - UTXO Database
 func (tx *Transaction) Hash() []byte {
-	data := make([]byte, 0)
+    data := make([]byte, 0)
 	data = append(data, packInt(tx.Type)...)
 	for _, txIn := range tx.TxIns {
 		data = append(data, txIn.pack()...)
@@ -90,7 +91,10 @@ func (tx *Transaction) Hash() []byte {
 // Returns the hash of the transaction not including signatures
 // Used for:
 //  - transaction signatures
-func (tx *Transaction) HashNoSig() []byte {
+func (tx *Transaction) HashNoSig() ([]byte, error) {
+    if ok, err := tx.validateComponents(); !ok {
+        return nil, err
+    }
 	data := make([]byte, 0)
 	data = append(data, packInt(tx.Type)...)
 	for _, txIn := range tx.TxIns {
@@ -101,7 +105,22 @@ func (tx *Transaction) HashNoSig() []byte {
 	}
 	data = append(data, tx.Parent...)
 	data = append(data, tx.Content...)
-	return Hash(data)
+	return Hash(data), nil
+}
+
+func (tx *Transaction) validateComponents() (bool, error) {
+    for _, txOut := range tx.TxOuts {
+        if len(txOut.PubKeyHash) != PKHASH_NUM_BYTES {
+            return false, errors.New(fmt.Sprintf("Output PubKeyHash should be %d bytes", PKHASH_NUM_BYTES))
+        }
+    }
+
+    for _, txIn := range tx.TxIns {
+        if len(txIn.PrevTxHash) != HASH_NUM_BYTES {
+            return false, errors.New(fmt.Sprintf("Input PrevTxHash should be %d bytes", HASH_NUM_BYTES))
+        }
+    }
+    return true, nil
 }
 
 func (tx *Transaction) ValidateStructure() (bool, error) {

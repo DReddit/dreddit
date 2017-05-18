@@ -16,6 +16,47 @@ func cleanUp(drNodes []*node.DRNode) {
 	}
 }
 
+func TestTxValidationPostStructure(t *testing.T) {
+	fmt.Printf("Test: Transaction Validation: Post Structure ...\n")
+	node.DIFFICULTY = 1
+	node.BLOCK_SIZE_THRESHOLD = 1
+    PORT_INIT := 50000
+	const nservers = 1
+	const nclients = 1
+	const tag = "tx validation - post"
+
+	drNodes := make([]*node.DRNode, nservers)
+	clients := make([]*clerk.Clerk, nclients)
+	empty := make([]string, 0)
+	serverPorts := make([]string, nservers)
+
+	pkPairs := util.ReadPKPairs()
+    
+	for i := 0; i < nservers; i++ {
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+PORT_INIT), pkPairs[i].PubHash, empty)
+		serverPorts[i] = strconv.Itoa(i + PORT_INIT)
+	}
+
+	for i := 0; i < nclients; i++ {
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+2100), pkPairs[nservers+i].Priv, serverPorts)
+	}
+
+	defer cleanUp(drNodes)
+
+    // steal valid privkey
+    x := 5
+    ck := clerk.MakeBadClerk(strconv.Itoa(x+2100), pkPairs[nservers+x].Priv, serverPorts)
+
+	for i := 1; i <= 10; i++ {
+		ok := ck.BadPostStructure(fmt.Sprintf("Post #%d", i))
+		if ok {
+			t.Fatal("Post structure validation failed")
+		}
+	}
+
+	fmt.Printf("  ... Passed\n")
+}
+
 func TestOnePost(t *testing.T) {
 	fmt.Printf("Test: Basic setup with one miner, one user, one post ...\n")
 	node.DIFFICULTY = 1
@@ -52,6 +93,182 @@ func TestOnePost(t *testing.T) {
 
 	fmt.Printf("  ... Passed\n")
 }
+
+func TestValidComment(t *testing.T) {
+	fmt.Printf("Test: Valid Comment ...\n")
+	node.DIFFICULTY = 1
+	node.BLOCK_SIZE_THRESHOLD = 1
+    PORT_INIT := 50100
+	const nservers = 1
+	const nclients = 1
+	const tag = "tx validation - post"
+
+	drNodes := make([]*node.DRNode, nservers)
+	clients := make([]*clerk.Clerk, nclients)
+	empty := make([]string, 0)
+	serverPorts := make([]string, nservers)
+
+	pkPairs := util.ReadPKPairs()
+    
+	for i := 0; i < nservers; i++ {
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+PORT_INIT), pkPairs[i].PubHash, empty)
+		serverPorts[i] = strconv.Itoa(i + PORT_INIT)
+	}
+
+	for i := 0; i < nclients; i++ {
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+2100), pkPairs[nservers+i].Priv, serverPorts)
+	}
+
+	defer cleanUp(drNodes)
+
+    var ok bool
+    ck := clients[0]
+    ok = ck.Post("Post 1")
+    if !ok {
+        t.Fatal("Initial Post failed")
+    }
+    
+    refNode := drNodes[0]
+    txHash := refNode.Blockchain[1].Transactions[0].Hash()
+    ok = ck.Comment(string(txHash), "Comment 1")
+    if !ok {
+        t.Fatal("Attempted Comment failed")
+    }
+
+	fmt.Printf("  ... Passed\n")
+}
+
+func TestTxValidationCommentStructure(t *testing.T) {
+	fmt.Printf("Test: Transaction Validation: Comment - Invalid Structure ...\n")
+	node.DIFFICULTY = 1
+	node.BLOCK_SIZE_THRESHOLD = 1
+    PORT_INIT := 50300
+	const nservers = 1
+	const nclients = 1
+	const tag = "tx validation - post"
+
+	drNodes := make([]*node.DRNode, nservers)
+	clients := make([]*clerk.Clerk, nclients)
+	empty := make([]string, 0)
+	serverPorts := make([]string, nservers)
+
+	pkPairs := util.ReadPKPairs()
+    
+	for i := 0; i < nservers; i++ {
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+PORT_INIT), pkPairs[i].PubHash, empty)
+		serverPorts[i] = strconv.Itoa(i + PORT_INIT)
+	}
+
+	for i := 0; i < nclients; i++ {
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+2100), pkPairs[nservers+i].Priv, serverPorts)
+	}
+
+	defer cleanUp(drNodes)
+
+    var ok bool
+    ck := clients[0]
+    ok = ck.Post("Post 1")
+    if !ok {
+        t.Fatal("Initial Post failed")
+    }
+   
+    x := 5
+    bck := clerk.MakeBadClerk(strconv.Itoa(x+2100), pkPairs[nservers+x].Priv, serverPorts)
+    ok = bck.BadCommentStructure("fakeTxHash", "Comment 1")
+    if ok {
+        t.Fatal("Comment should not have been validated")
+    }
+
+	fmt.Printf("  ... Passed\n")
+}
+
+func TestTxValidationCommentParent(t *testing.T) {
+	fmt.Printf("Test: Transaction Validation: Comment - Invalid Parent ...\n")
+	node.DIFFICULTY = 1
+	node.BLOCK_SIZE_THRESHOLD = 1
+    PORT_INIT := 50200
+	const nservers = 1
+	const nclients = 1
+	const tag = "tx validation - post"
+
+	drNodes := make([]*node.DRNode, nservers)
+	clients := make([]*clerk.Clerk, nclients)
+	empty := make([]string, 0)
+	serverPorts := make([]string, nservers)
+
+	pkPairs := util.ReadPKPairs()
+    
+	for i := 0; i < nservers; i++ {
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+PORT_INIT), pkPairs[i].PubHash, empty)
+		serverPorts[i] = strconv.Itoa(i + PORT_INIT)
+	}
+
+	for i := 0; i < nclients; i++ {
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+2100), pkPairs[nservers+i].Priv, serverPorts)
+	}
+
+	defer cleanUp(drNodes)
+
+    var ok bool
+    ck := clients[0]
+    ok = ck.Post("Post 1")
+    if !ok {
+        t.Fatal("Initial Post failed")
+    }
+    
+    fakeTxHash := string(node.Hash([]byte("asdfb")))
+    ok = ck.Comment(string(fakeTxHash), "Comment 1")
+    if ok {
+        t.Fatal("Comment should not have been validated")
+    }
+
+	fmt.Printf("  ... Passed\n")
+}
+
+func TestTxValidationUpvoteStructure(t *testing.T) {
+	fmt.Printf("Test: Transaction Validation: Upvote - Invalid Structure ...\n")
+	node.DIFFICULTY = 1
+	node.BLOCK_SIZE_THRESHOLD = 1
+    PORT_INIT := 50400
+	const nservers = 1
+	const nclients = 1
+	const tag = "tx validation - post"
+
+	drNodes := make([]*node.DRNode, nservers)
+	clients := make([]*clerk.Clerk, nclients)
+	empty := make([]string, 0)
+	serverPorts := make([]string, nservers)
+
+	pkPairs := util.ReadPKPairs()
+    
+	for i := 0; i < nservers; i++ {
+		drNodes[i] = node.StartDRNode(i, strconv.Itoa(i+PORT_INIT), pkPairs[i].PubHash, empty)
+		serverPorts[i] = strconv.Itoa(i + PORT_INIT)
+	}
+
+	for i := 0; i < nclients; i++ {
+		clients[i] = clerk.MakeClerk(strconv.Itoa(i+2100), pkPairs[nservers+i].Priv, serverPorts)
+	}
+
+	defer cleanUp(drNodes)
+
+    var ok bool
+    ck := clients[0]
+    ok = ck.Post("Post 1")
+    if !ok {
+        t.Fatal("Initial Post failed")
+    }
+   
+    x := 5
+    bck := clerk.MakeBadClerk(strconv.Itoa(x+2100), pkPairs[nservers+x].Priv, serverPorts)
+    ok = bck.BadUpvoteStructure("fakeTxHash", "fakePubKeyHash")
+    if ok {
+        t.Fatal("Comment should not have been validated")
+    }
+
+	fmt.Printf("  ... Passed\n")
+}
+
 
 func TestMultiplePosts(t *testing.T) {
 	fmt.Printf("Test: Basic setup with one miner, one user, ten posts ...\n")
@@ -205,3 +422,5 @@ func TestChainResolution(t *testing.T) {
 
 	fmt.Printf("  ... Passed\n")
 }
+
+

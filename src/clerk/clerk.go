@@ -125,9 +125,15 @@ func (ck *Clerk) Merge(newPeers []string) {
 
 func (ck *Clerk) SignTx(tx *node.Transaction) {
 	privKey := ck.privKey
-	sig, err := privKey.Sign(tx.HashNoSig())
+    var err error
+    txHashNoSig, err := tx.HashNoSig() 
+    if err != nil {
+        DPrintf("%d: %v", ck.clerkId, err)
+        return
+    }
+	sig, err := privKey.Sign(txHashNoSig)
 	if err != nil {
-		fmt.Println(err)
+        DPrintf("%d: %v", ck.clerkId, err)
 		return
 	}
 	for i, txIn := range tx.TxIns {

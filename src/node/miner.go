@@ -585,6 +585,12 @@ func (node *DRNode) AppendTx(args *AppendTxArgs, reply *AppendTxReply) error {
 	DPrintf("%d received AppendTx request from client %d", node.me, args.ClerkId)
 	node.mu.Lock()
 
+    // initial check to make sure Tx is Hashable:
+    if ok, _ :=  args.Tx.validateComponents(); !ok {
+        node.mu.Unlock()
+        reply.Success = false
+        return nil
+    }
 	s := string(args.Tx.Hash())
 	_, ok := node.SeenTxs[s]
 	if ok {
@@ -766,7 +772,7 @@ func (node *DRNode) validateTransaction(tx *Transaction) (bool, error) {
 		if ok && utxoEntry.outputs[txIn.PrevTxOutIndex].Spent == false {
 
 			// if valid txIn, validate signature
-			if !(node.verifySignature(&txIn, tx.HashNoSig())) {
+			if txHashNoSig, err := tx.HashNoSig(); err != nil || !(node.verifySignature(&txIn, txHashNoSig)) {
 				return false, errors.New("Invalid transaction signature")
 			}
 
