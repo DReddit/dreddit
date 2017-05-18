@@ -2,6 +2,8 @@ package node
 
 import (
 	"encoding/base64"
+    "errors"
+    "bytes"
 )
 
 const (
@@ -101,4 +103,43 @@ func (tx *Transaction) HashNoSig() []byte {
 	data = append(data, tx.Parent...)
 	data = append(data, tx.Content...)
 	return Hash(data)
+}
+
+func (tx *Transaction) ValidateStructure() (bool, error) {
+    // For Post and Comment TX, there should only be one output (to oneself)
+    if tx.Type == POST || tx.Type == COMMENT {
+        if len(tx.TxOuts) != 1 {
+            return false, errors.New("Transaction should only have one output")
+        }
+        // validate that the rest of the money goes back to original account 
+        // NOTE: problematic if we ever want to support an account to have multiple public keys
+        if !(bytes.Equal(PKHash(tx.TxIns[0].PubKey), tx.TxOuts[0].PubKeyHash)) {
+            return false, errors.New("Output PubKeyHash not consistent with input")
+        }
+    }
+    // Upvote Tx should have 2 outputs
+    if tx.Type == UPVOTE {
+        if len(tx.TxOuts) != 2 {
+            return false, errors.New("Upvote Tx should only have two outputs")
+        }
+
+        // validate that second output goes back to original account 
+        // NOTE: problematic if we ever want to support an account to have multiple public keys
+        if !(bytes.Equal(PKHash(tx.TxIns[0].PubKey), tx.TxOuts[1].PubKeyHash)) {
+            return false, errors.New("Output PubKeyHash not consistent with input")
+        }
+
+    }
+
+    if tx.Type == COMMENT || tx.Type == UPVOTE {
+        if tx.Parent == nil {
+            return false, errors.New("Comment/Upvote Tx must have parent")
+        }
+    } else { 
+        if tx.Parent != nil {
+            return false, errors.New("Transfer/Post Tx should not parent")
+        }
+    }
+    return true, nil
+
 }

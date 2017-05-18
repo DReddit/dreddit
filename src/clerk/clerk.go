@@ -99,7 +99,6 @@ func (ck *Clerk) Transfer(destination string, value uint32) bool {
 	current := ck.current
 	args := node.AppendTxArgs{}
 
-	var inputSum uint32
 	txFee := uint32(node.TX_FEE)
 	priv := ck.privKey
 	pubkeyHash := node.PKHash(priv.PubKey().SerializeCompressed())
@@ -134,7 +133,7 @@ func (ck *Clerk) Transfer(destination string, value uint32) bool {
 	// give self amount of input - (transaction fee + value)
 	ptsTx := node.TxOut{inputSum - txFee - value, pubkeyHash}
 	// give recipient value
-	recTx := node.TxOut{value, bytes(destination)}
+	recTx := node.TxOut{value, []byte(destination)}
 	txOuts := make([]node.TxOut, 2)
 	txOuts[0] = recTx
 	txOuts[1] = ptsTx
@@ -247,7 +246,7 @@ func (ck *Clerk) Comment(parent string, content string) bool {
 	txOuts := make([]node.TxOut, 1)
 	txOuts[0] = ptsTx
 
-	Tx := node.Transaction{node.COMMENT, txIns, txOuts, bytes(parent), []byte(content)}
+	Tx := node.Transaction{node.COMMENT, txIns, txOuts, []byte(parent), []byte(content)}
 	ck.SignTx(&Tx)
 
 	args.Tx = Tx
@@ -277,7 +276,6 @@ func (ck *Clerk) Upvote(parent string, destination string) bool {
 	current := ck.current
 	args := node.AppendTxArgs{}
 
-	var inputSum uint32
 	txFee := uint32(node.TX_FEE)
 	priv := ck.privKey
 	pubkeyHash := node.PKHash(priv.PubKey().SerializeCompressed())
@@ -308,12 +306,12 @@ func (ck *Clerk) Upvote(parent string, destination string) bool {
 	ptsTx := node.TxOut{inputSum - txFee - node.TX_UPVOTE, pubkeyHash}
 	// give recipient upvote
 	// TODO: change this method to automatically find the destination from the blockchain
-	upvTx := node.TxOut{node.TX_UPVOTE, bytes(destination)}
+	upvTx := node.TxOut{node.TX_UPVOTE, []byte(destination)}
 	txOuts := make([]node.TxOut, 2)
 	txOuts[0] = upvTx
 	txOuts[1] = ptsTx
 
-	Tx := node.Transaction{node.UPVOTE, txIns, txOuts, bytes(parent), nil}
+	Tx := node.Transaction{node.UPVOTE, txIns, txOuts, []byte(parent), nil}
 	ck.SignTx(&Tx)
 
 	args.Tx = Tx

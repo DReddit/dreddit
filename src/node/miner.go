@@ -282,6 +282,9 @@ func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
 				return false, errors.New("PubKeyHashes don't match")
 			}
 
+            // TODO: validate that txIn is spendable.
+            //      Need to traverse last 10 blocks of blockchain and validate that transaction does not exist in those blocks
+
 			inputSum += utxoEntry.outputs[txIn.PrevTxOutIndex].Value
 
 		} else {
@@ -296,5 +299,37 @@ func (node *DRNode) ValidateTransaction(tx *Transaction) (bool, error) {
 		return false, errors.New("Input sum (plus fee) is less than output sum")
 	}
 
+    // validate that transaction has right structure (number of outputs)
+    if ok, err := tx.ValidateStructure(); !ok {
+        return false, err
+    }
+
+    // At this point Tx are structurally valid
+    if tx.Type == COMMENT || tx.Type == UPVOTE {
+        parentTx := node.FindTxInBlockChain(tx.Parent)
+        if parentTx == nil || !(parentTx.Type == POST || parentTx.Type == COMMENT) {
+            return false, errors.New("Invalid parent Tx Hash provided")
+        } 
+        if tx.Type == UPVOTE && !(bytes.Equal(tx.TxOuts[0].PubKeyHash, parentTx.TxOuts[0].PubKeyHash)) {
+            return false, errors.New("Parent PubKeyHash not matching")
+        }
+    }
+
+
+    // Comment TX
+    // Check 
+    // if tx.Parent
+
 	return true, nil
+}
+
+func (node *DRNode) FindTxInBlockChain(txHash []byte) *Transaction {
+    for _, block := range node.Blockchain {
+        for _, tx := range block.Transactions {
+            if bytes.Equal(tx.Hash(), txHash) {
+                return &tx
+            }
+        }
+    }
+    return nil
 }
