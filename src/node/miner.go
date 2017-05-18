@@ -273,12 +273,6 @@ func (sc *SideChain) Recompute(depth, parentIndex int) {
 }
 
 func (node *DRNode) replayLog() {
-	node.bcmu.Lock()
-	// first we reset the current blockchain.
-	node.Blockchain = make([]*Block, 0)
-	node.SideChains = make([]*SideChain, 0)
-	node.OrphanChains = make([]*SideChain, 0)
-	node.bcmu.Unlock()
 
 	// now we replay the whole log
 	for _, newBlock := range node.Log {
@@ -557,6 +551,8 @@ func (node *DRNode) bootstrap() {
 	node.Blockchain = make([]*Block, 0)
 	genesisBlock := GenerateGenesisBlock()
 	node.Blockchain = append(node.Blockchain, genesisBlock)
+  node.Log = make([]Block, 0)
+  node.Log = append(node.Log, *genesisBlock)
 
 	node.Utxo = new(UtxoDb)
 	node.Utxo.Entries = make(map[string]*UtxoEntry)
