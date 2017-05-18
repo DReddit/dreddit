@@ -58,9 +58,10 @@ type GetUtxoReply struct {
 
 // Returns current set of UTXOs to a clerk, who needs it to compute
 // current balance in wallet
-func (node *DRNode) GetUtxo(args *GetUtxoArgs, reply *GetUtxoReply) {
+func (node *DRNode) GetUtxo(args *GetUtxoArgs, reply *GetUtxoReply) error {
 	DPrintf("%d received GetUtxo request from client %d", node.me, args.ClerkId)
 	node.utxoMu.Lock()
 	reply.UnspentTxs, reply.Success = node.Utxo.GetUnspentTxs(args.PubKeyHash)
 	node.utxoMu.Unlock()
+	return nil
 }

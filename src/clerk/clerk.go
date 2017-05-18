@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/btcsuite/btcd/btcec"
-	"labrpc"
 	"log"
 	"math/big"
 	"net/rpc"
@@ -20,7 +19,7 @@ type Clerk struct {
 	peermu  sync.Mutex          // lock on list of dreddit servers
 	port    string              // address of clerk
 	ports   []string            // addresses of dreddit servers
-	servers []*labrpc.ClientEnd // the list of dreddit nodes the clerk knows of
+	servers []*rpc.Client       // the list of dreddit nodes the clerk knows of
 	clerkId int                 // the unique id of this clerk
 	current int                 // the current server that this clerk will talk to
 	privKey *btcec.PrivateKey   // private key used by clerk
@@ -148,8 +147,8 @@ func (ck *Clerk) QueryUtxo(pubKeyHash []byte) ([]node.UnspentTx, bool) {
 	args.PubKeyHash = pubKeyHash
 	for {
 		reply := node.GetUtxoReply{}
-		ok := ck.servers[current].Call("DRNode.GetUtxo", &args, &reply)
-		if !ok {
+		err := ck.servers[current].Call("DRNode.GetUtxo", &args, &reply)
+		if err != nil {
 			current = (current + 1) % len(ck.servers)
 		} else {
 			if reply.Success {
@@ -221,8 +220,8 @@ func (ck *Clerk) Transfer(destination string, value uint32) bool {
 
 	for {
 		reply := node.AppendTxReply{}
-		ok := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
-		if !ok {
+		err := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
+		if err != nil {
 			current = (current + 1) % len(ck.servers)
 		} else {
 			if reply.Success {
@@ -275,8 +274,8 @@ func (ck *Clerk) Post(content string) bool {
 
 	for {
 		reply := node.AppendTxReply{}
-		ok := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
-		if !ok {
+		err := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
+		if err != nil {
 			current = (current + 1) % len(ck.servers)
 		} else {
 			if reply.Success {
@@ -329,8 +328,8 @@ func (ck *Clerk) Comment(parent string, content string) bool {
 
 	for {
 		reply := node.AppendTxReply{}
-		ok := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
-		if !ok {
+		err := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
+		if err != nil {
 			current = (current + 1) % len(ck.servers)
 		} else {
 			if reply.Success {
@@ -394,8 +393,8 @@ func (ck *Clerk) Upvote(parent string, destination string) bool {
 
 	for {
 		reply := node.AppendTxReply{}
-		ok := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
-		if !ok {
+		err := ck.servers[current].Call("DRNode.AppendTx", &args, &reply)
+		if err != nil {
 			current = (current + 1) % len(ck.servers)
 		} else {
 			if reply.Success {

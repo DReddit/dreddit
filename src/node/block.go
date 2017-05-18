@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"time"
+	"errors"
 )
 
 const DIFFICULTY = 4
@@ -39,7 +40,7 @@ func pack(block *Block) []byte {
 	copy(data[4+HASH_NUM_BYTES:4+2*HASH_NUM_BYTES], block.MerkleRoot)             // Merkle Root
 	copy(data[4+2*HASH_NUM_BYTES:4+2*HASH_NUM_BYTES+4], packInt(block.Timestamp)) // Timestamp
 	copy(data[8+2*HASH_NUM_BYTES:8+2*HASH_NUM_BYTES+4], packInt(block.Bits))      // Bits
-	copy(data[nonceIndex:nonceIndex+4], packInt(block.Nonce))                     // Nonce
+	copy(data[12+2*HASH_NUM_BYTES:12+2*HASH_NUM_BYTES+4], packInt(block.Nonce))                     // Nonce
 	return data
 }
 

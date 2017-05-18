@@ -45,6 +45,9 @@ type DRNode struct {
 	OrphanChains []*SideChain // non-main chains whoes earliest block is parent-less
 	Log          []Block      // log of blocks for replay purposes
 
+	// UTXO
+	Utxo       *UtxoDb         // UTXO
+
 	// networking
 	port     string        // port of this server
 	ports    []string      // ports of this server's peers
@@ -165,7 +168,7 @@ func StartDRNode(me int, port string, servers []string) *DRNode {
 	// If our blockchain is still empty, we must be the first-ish node in the network!
 	// We'll set up the canonical dreddit genesis block
 	if len(node.Blockchain) == 0 {
-		node.Bootstrap()
+		node.bootstrap()
 		for _, block := range node.Blockchain {
 			DPrintf("Genesis Block:\n%v", block.toString())
 		}
@@ -302,7 +305,7 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 		bytes.Compare(prevHash, node.Blockchain[len(node.Blockchain)-1].BlockHash) == 0 { // adds to main chain
 		succ, err := node.validateBlockTxs(newBlock)
 		if !succ {
-			return false, err
+			return err
 		}
 		// append to main chain
 		node.Blockchain = append(node.Blockchain, newBlock)
@@ -310,7 +313,7 @@ func (node *DRNode) SendBlock(args *SendBlockArgs, reply *SendBlockReply) error 
 		// Finally, mark all the successful transactions as valid
 		node.utxoMu.Lock()
 		for _, tx := range newBlock.Transactions {
-			node.UpdateUtxoDb(tx)
+			node.updateUtxoDb(tx)
 		}
 		node.utxoMu.Unlock()
 		return nil
@@ -484,7 +487,7 @@ func (node *DRNode) gossipProtocol() {
 }
 
 // Updates the node's UTXO with the new tranasction tx
-func (node *DRNode) UpdateUtxoDb(tx Transaction) {
+func (node *DRNode) updateUtxoDb(tx Transaction) {
 	for _, txIn := range tx.TxIns {
 		txHash := string(txIn.PrevTxHash)
 		uidx := txIn.PrevTxOutIndex
@@ -525,7 +528,7 @@ func (node *DRNode) UpdateUtxoDb(tx Transaction) {
 // Bootstrapping mining node
 // - give initial genesis block
 // - fill UTXO accordingly
-func (node *DRNode) Bootstrap() {
+func (node *DRNode) bootstrap() {
 	DPrintf("DRNode %d: boostrapping blockchain", node.me)
 	node.Blockchain = make([]*Block, 0)
 	genesisBlock := GenerateGenesisBlock()
@@ -535,7 +538,7 @@ func (node *DRNode) Bootstrap() {
 	node.Utxo.Entries = make(map[string]*UtxoEntry)
 	for _, block := range node.Blockchain {
 		for _, tx := range block.Transactions {
-			node.UpdateUtxoDb(tx)
+			node.updateUtxoDb(tx)
 		}
 	}
 }
@@ -711,10 +714,10 @@ func (node *DRNode) mine() {
 				node.utxoMu.Lock()
 				for _, txNode := range txNodes {
 					node.PendingTxs[txNode.ClerkId].Status = SUCCESS
-					node.UpdateUtxoDb(txNode.Tx)
+					node.updateUtxoDb(txNode.Tx)
 				}
 				// update UTXO with coinbase tx
-				node.UpdateUtxoDb(newBlock.Transactions[len(newBlock.Transactions)-1])
+				node.updateUtxoDb(newBlock.Transactions[len(newBlock.Transactions)-1])
 				node.numPending -= len(txNodes)
 				node.utxoMu.Unlock()
 			}
@@ -729,7 +732,7 @@ func (node *DRNode) mine() {
 }
 
 // Verify the signature of a TxIn, given the input tx's signature-free hash
-func (node *DRNode) VerifySignature(txIn *TxIn, txHashNoSig []byte) bool {
+func (node *DRNode) verifySignature(txIn *TxIn, txHashNoSig []byte) bool {
 	signature, err := btcec.ParseSignature(txIn.Sig, btcec.S256())
 	if err != nil {
 		fmt.Println(err)
@@ -759,7 +762,7 @@ func (node *DRNode) validateTransaction(tx *Transaction) (bool, error) {
 		if ok && utxoEntry.outputs[txIn.PrevTxOutIndex].Spent == false {
 
 			// if valid txIn, validate signature
-			if !(node.VerifySignature(&txIn, tx.HashNoSig())) {
+			if !(node.verifySignature(&txIn, tx.HashNoSig())) {
 				return false, errors.New("Invalid transaction signature")
 			}
 
@@ -792,7 +795,7 @@ func (node *DRNode) validateTransaction(tx *Transaction) (bool, error) {
 
 	// At this point Tx are structurally valid
 	if tx.Type == COMMENT || tx.Type == UPVOTE {
-		parentTx := node.FindTxInBlockChain(tx.Parent)
+		parentTx := node.findTxInBlockChain(tx.Parent)
 		if parentTx == nil || !(parentTx.Type == POST || parentTx.Type == COMMENT) {
 			return false, errors.New("Invalid parent Tx Hash provided")
 		}
@@ -810,18 +813,18 @@ func (node *DRNode) validateTransaction(tx *Transaction) (bool, error) {
 //   - the coinbase transaction's value is equal to the sum of the
 //     transaction fees plus the mining reward
 func (node *DRNode) validateBlockTxs(newBlock *Block) (bool, error) {
-	for _, tx := newBlock.Transactions {
+	for _, tx := range(newBlock.Transactions) {
 		if tx.Type != COINBASE {
 			succ, err := tx.ValidateStructure()
 			if !succ {
 				return false, err
 			}
-			succ, err := node.validateTransaction(tx)
+			succ, err = node.validateTransaction(&tx)
 			if !succ {
 				return false, err
 			}
 		} else {
-			if tx.TxOuts[0].Value != (len(newBlock.Transactions) - 1) * TX_FEE + TX_COINBASE {
+			if tx.TxOuts[0].Value != uint32((len(newBlock.Transactions) - 1) * TX_FEE + TX_COINBASE) {
 				return false, errors.New("Coinbase value is wrong")
 			}
 		}
@@ -831,7 +834,7 @@ func (node *DRNode) validateBlockTxs(newBlock *Block) (bool, error) {
 	return true, nil
 }
 
-func (node *DRNode) FindTxInBlockChain(txHash []byte) *Transaction {
+func (node *DRNode) findTxInBlockChain(txHash []byte) *Transaction {
 	for _, block := range node.Blockchain {
 		for _, tx := range block.Transactions {
 			if bytes.Equal(tx.Hash(), txHash) {
